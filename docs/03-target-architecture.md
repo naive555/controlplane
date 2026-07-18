@@ -1,0 +1,105 @@
+# Target Architecture — controlplane monorepo (Go + Next.js)
+
+> Stack decisions confirmed with the project owner on 2026-07-18:
+> **Backend: Go + Echo · sqlc + pgx · goose migrations. Frontend: Next.js (App Router) + shadcn/ui + Tailwind. Glue: root Makefile + docker-compose.**
+
+## Why these choices
+
+| Decision | Choice | Rationale |
+| -------- | ------ | --------- |
+| Web framework | **Echo** | Centralized `HTTPErrorHandler` maps 1:1 to the source's ERROR_MAP/globalErrorHandler pattern; built-in request-id, logging, and recover middleware cover the Elysia hooks; net/http compatible; mature. |
+| DB layer | **sqlc + pgx/v5** | Hand-written SQL → generated type-safe Go; closest to Drizzle's type-safety without ORM magic; the existing plain-SQL migrations are reusable. |
+| Migrations | **goose** | Runs the existing `.sql` files with minimal annotation changes (`-- +goose Up`). |
+| Redis | **go-redis/v9** | Standard client; mirrors ioredis usage directly. |
+| Validation | **go-playground/validator** (via Echo binder) | Struct tags replace TypeBox schemas. |
+| JWT | **golang-jwt/jwt/v5** | HS256, same claims/secrets as source. |
+| Logging | **log/slog** (JSON in prod, text/tint in dev) | stdlib; pino redaction rules re-implemented as a slog ReplaceAttr/middleware concern. |
+| API docs | **swaggo/echo-swagger** (or hand-written OpenAPI 3 YAML served by Swagger UI) | Replaces @elysiajs/swagger at `/swagger`. |
+| Frontend | **Next.js App Router + TypeScript + Tailwind + shadcn/ui + TanStack Query** | Mainstream B2B dashboard stack; shadcn gives tables/forms/dialogs for org/RBAC/audit UIs quickly. |
+| Monorepo glue | **Makefile + docker-compose** | Language-neutral one-command dev (`make dev`), test, migrate targets. |
+
+## Monorepo layout
+
+```
+controlplane/
+├── CLAUDE.md
+├── Makefile                  # dev, test, lint, migrate, seed, sqlc, build, up/down
+├── compose.yaml              # db, redis, api, web
+├── docs/                     # ← these planning documents
+├── backend/
+│   ├── cmd/api/main.go       # bootstrap: config → redis ping → db ping → server; graceful shutdown
+│   ├── internal/
+│   │   ├── config/           # env loading + validation (replaces process.env access)
+│   │   ├── server/           # Echo setup, route mounting, error handler, middleware wiring
+│   │   ├── middleware/       # requestid, auth (RequireAuth/RequireOrg/RequirePermission), logger
+│   │   ├── module/           # mirrors src/modules/*
+│   │   │   ├── auth/         #   handler.go, service.go, dto.go
+│   │   │   ├── organization/ #   handler.go, service.go, repository = sqlc queries
+│   │   │   ├── rbac/
+│   │   │   ├── auditlog/
+│   │   │   ├── subscription/
+│   │   │   └── health/
+│   │   ├── domain/           # extension point (mirrors src/domains/)
+│   │   ├── infra/
+│   │   │   ├── database/     # pgx pool, sqlc generated code (db/), queries/ (*.sql)
+│   │   │   └── redis/        # client + RedisAuth helpers (blacklist, login attempts)
+│   │   └── shared/
+│   │       ├── apperror/     # typed error codes → HTTP mapping (replaces ERROR_MAP)
+│   │       └── logger/       # slog setup, redaction
+│   ├── migrations/           # goose SQL (ported from drizzle migrations)
+│   ├── sqlc.yaml
+│   ├── go.mod
+│   └── Dockerfile            # multi-stage: golang builder → distroless/alpine runner
+├── frontend/
+│   ├── app/                  # Next.js App Router
+│   │   ├── (auth)/login, register
+│   │   └── (dashboard)/orgs, members, roles, audit-logs, subscription, settings
+│   ├── components/           # shadcn/ui
+│   ├── lib/api/              # typed API client (fetch wrapper w/ token refresh, x-organization-id)
+│   ├── package.json
+│   └── Dockerfile
+├── k8s/                      # ported manifests: api image → Go binary, add web Deployment
+└── .github/workflows/        # ci.yml: backend job (go test w/ services), frontend job (lint+build)
+```
+
+## Backend architecture notes
+
+- **Handlers ↔ services ↔ sqlc queries** mirror the source's controller/service/repository convention. Services return typed `apperror.Error{Code}` values; the Echo `HTTPErrorHandler` maps codes → status/message per the contract table.
+- **Auth middleware** replaces Elysia macros. Inject `user`, `organizationId`, `membership` into `echo.Context` (or a typed request context). Three constructors: `RequireAuth()`, `RequireOrg()`, `RequirePermission(action string)`.
+- **No dynamic-import hacks**: RBAC/Org service dependencies are plain constructor injection.
+- **DB**: one `pgxpool.Pool`; sqlc queries per module in `infra/database/queries/*.sql`. Transactions where the source did multi-step writes (org create + owner membership; session rotation).
+- **Graceful shutdown**: `signal.NotifyContext` + `echo.Shutdown(ctx)` + pool/redis close — mirrors source SIGTERM/SIGINT handling.
+- **Config**: fail fast at boot if required env is missing (source only checked REDIS_URL; improve to validate all, incl. 32-char secret minimum).
+
+## Frontend scope (initial dashboard)
+
+Pages that exercise every backend feature:
+1. **Auth**: register, login, token refresh (silent), logout.
+2. **Org switcher**: list my orgs, create org (sets `x-organization-id` for subsequent calls).
+3. **Members**: list (needs a backend list-members endpoint — source lacks one; add or derive), invite, remove.
+4. **Roles & permissions**: list/create roles, edit permission sets, assign roles to members.
+5. **Audit log viewer**: filterable table (user, action, limit).
+6. **Subscription**: current plan + limits display, assign plan.
+
+API client concerns: attach Bearer token, auto-refresh on 401 (single-flight), attach `x-organization-id` from active-org state, surface `x-request-id` in error toasts.
+
+## Dev experience (Makefile targets)
+
+```
+make up          # docker compose up db redis -d
+make dev         # backend (air hot-reload) + frontend (next dev) concurrently
+make migrate     # goose up
+make seed        # seed default plans (free/pro/enterprise)
+make sqlc        # regenerate query code
+make test        # go test ./... + frontend tests
+make lint        # golangci-lint + eslint
+make build       # both artifacts / docker images
+```
+
+## Open questions for the planning model (Opus)
+
+1. Should `POST /subscription/assign` gain an admin/permission guard (fixing the source oversight) or preserve bug-for-bug parity? (Recommend: fix, document as intentional deviation.)
+2. Add a `GET /organizations/members` list endpoint for the frontend, or keep strict parity and derive from audit logs? (Recommend: add — the frontend needs it.)
+3. Hash refresh tokens at rest (source stores raw JWT)? (Recommend: yes if deviation allowed; keep raw for parity otherwise.)
+4. Testing depth: source has unit tests with mocked infra; Go port should decide unit (mock interfaces) vs. integration (testcontainers / CI service containers, matching source CI).
+5. Whether the access-token blacklist TTL should follow `JWT_ACCESS_EXPIRES_IN` instead of hard-coded 15 min.
