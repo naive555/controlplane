@@ -1,0 +1,21 @@
+# Env
+.env
+.env.local
+.env.*.local
+
+# Node / Next.js
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+
+# Go
+backend/tmp/
+backend/bin/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
