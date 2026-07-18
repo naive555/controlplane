@@ -4,7 +4,7 @@
 
 **controlplane** — a monorepo rewrite of `controlplane-api` (Bun + ElysiaJS, located at `../controlplane-api`) into **Go (backend) + Next.js (frontend)**. It is a multi-tenant B2B SaaS platform template: JWT auth with refresh-token rotation, organizations/memberships, custom RBAC with wildcard permissions, immutable audit logs, and subscription plan-limit enforcement. Business domains get added on top of this core.
 
-**Status**: Phase 0 scaffold complete. `apps/backend/` and `apps/frontend/` are runnable skeletons (health endpoint, placeholder page); business logic is not implemented yet. `docs/` holds the analysis and migration plan. Read `docs/` before implementing anything.
+**Status**: Phase 0 scaffold complete. `apps/backend/` and `apps/frontend/` are runnable skeletons (health endpoint, placeholder page); business logic is not implemented yet. See [`README.md`](README.md) for the quickstart to run it. `docs/` holds the analysis and migration plan. Read `docs/` before implementing anything.
 
 ## Decided stack (do not re-litigate without the owner)
 

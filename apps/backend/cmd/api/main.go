@@ -76,12 +76,12 @@ func main() {
 
 // loadDotEnv loads environment variables from a .env file if one is found.
 // It checks the repo root first (the common case when running via
-// `make api`, which cds into backend/ before `go run`), then the working
-// directory. It is a no-op — not fatal — if neither exists, since in
-// Docker/production env vars are injected directly (mirrors Bun's
-// optional .env loading in the source app).
+// `make api`, which cds into apps/backend/ before `go run`), then a couple
+// of other plausible working directories. It is a no-op — not fatal — if
+// none exist, since in Docker/production env vars are injected directly
+// (mirrors Bun's optional .env loading in the source app).
 func loadDotEnv() {
-	for _, path := range []string{"../.env", ".env"} {
+	for _, path := range []string{"../../.env", "../.env", ".env"} {
 		if err := godotenv.Load(path); err == nil {
 			return
 		}
