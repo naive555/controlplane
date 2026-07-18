@@ -5,13 +5,13 @@
 
 # Node / Next.js
 node_modules/
-frontend/.next/
-frontend/out/
-frontend/.env.local
+apps/frontend/.next/
+apps/frontend/out/
+apps/frontend/.env.local
 
 # Go
-backend/tmp/
-backend/bin/
+apps/backend/tmp/
+apps/backend/bin/
 
 # Logs
 *.log

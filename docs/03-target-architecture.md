@@ -26,38 +26,39 @@ controlplane/
 ├── Makefile                  # dev, test, lint, migrate, seed, sqlc, build, up/down
 ├── compose.yaml              # db, redis, api, web
 ├── docs/                     # ← these planning documents
-├── backend/
-│   ├── cmd/api/main.go       # bootstrap: config → redis ping → db ping → server; graceful shutdown
-│   ├── internal/
-│   │   ├── config/           # env loading + validation (replaces process.env access)
-│   │   ├── server/           # Echo setup, route mounting, error handler, middleware wiring
-│   │   ├── middleware/       # requestid, auth (RequireAuth/RequireOrg/RequirePermission), logger
-│   │   ├── module/           # mirrors src/modules/*
-│   │   │   ├── auth/         #   handler.go, service.go, dto.go
-│   │   │   ├── organization/ #   handler.go, service.go, repository = sqlc queries
-│   │   │   ├── rbac/
-│   │   │   ├── auditlog/
-│   │   │   ├── subscription/
-│   │   │   └── health/
-│   │   ├── domain/           # extension point (mirrors src/domains/)
-│   │   ├── infra/
-│   │   │   ├── database/     # pgx pool, sqlc generated code (db/), queries/ (*.sql)
-│   │   │   └── redis/        # client + RedisAuth helpers (blacklist, login attempts)
-│   │   └── shared/
-│   │       ├── apperror/     # typed error codes → HTTP mapping (replaces ERROR_MAP)
-│   │       └── logger/       # slog setup, redaction
-│   ├── migrations/           # goose SQL (ported from drizzle migrations)
-│   ├── sqlc.yaml
-│   ├── go.mod
-│   └── Dockerfile            # multi-stage: golang builder → distroless/alpine runner
-├── frontend/
-│   ├── app/                  # Next.js App Router
-│   │   ├── (auth)/login, register
-│   │   └── (dashboard)/orgs, members, roles, audit-logs, subscription, settings
-│   ├── components/           # shadcn/ui
-│   ├── lib/api/              # typed API client (fetch wrapper w/ token refresh, x-organization-id)
-│   ├── package.json
-│   └── Dockerfile
+├── apps/
+│   ├── backend/
+│   │   ├── cmd/api/main.go       # bootstrap: config → redis ping → db ping → server; graceful shutdown
+│   │   ├── internal/
+│   │   │   ├── config/           # env loading + validation (replaces process.env access)
+│   │   │   ├── server/           # Echo setup, route mounting, error handler, middleware wiring
+│   │   │   ├── middleware/       # requestid, auth (RequireAuth/RequireOrg/RequirePermission), logger
+│   │   │   ├── module/           # mirrors src/modules/*
+│   │   │   │   ├── auth/         #   handler.go, service.go, dto.go
+│   │   │   │   ├── organization/ #   handler.go, service.go, repository = sqlc queries
+│   │   │   │   ├── rbac/
+│   │   │   │   ├── auditlog/
+│   │   │   │   ├── subscription/
+│   │   │   │   └── health/
+│   │   │   ├── domain/           # extension point (mirrors src/domains/)
+│   │   │   ├── infra/
+│   │   │   │   ├── database/     # pgx pool, sqlc generated code (db/), queries/ (*.sql)
+│   │   │   │   └── redis/        # client + RedisAuth helpers (blacklist, login attempts)
+│   │   │   └── shared/
+│   │   │       ├── apperror/     # typed error codes → HTTP mapping (replaces ERROR_MAP)
+│   │   │       └── logger/       # slog setup, redaction
+│   │   ├── migrations/           # goose SQL (ported from drizzle migrations)
+│   │   ├── sqlc.yaml
+│   │   ├── go.mod
+│   │   └── Dockerfile            # multi-stage: golang builder → distroless/alpine runner
+│   └── frontend/
+│       ├── app/                  # Next.js App Router
+│       │   ├── (auth)/login, register
+│       │   └── (dashboard)/orgs, members, roles, audit-logs, subscription, settings
+│       ├── components/           # shadcn/ui
+│       ├── lib/api/              # typed API client (fetch wrapper w/ token refresh, x-organization-id)
+│       ├── package.json
+│       └── Dockerfile
 ├── k8s/                      # ported manifests: api image → Go binary, add web Deployment
 └── .github/workflows/        # ci.yml: backend job (go test w/ services), frontend job (lint+build)
 ```

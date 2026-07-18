@@ -31,7 +31,7 @@ services:
 
   api:
     build:
-      context: ./backend
+      context: ./apps/backend
     container_name: controlplane-api
     ports:
       - "3000:3000"
@@ -46,7 +46,7 @@ services:
 
   # web:
   #   build:
-  #     context: ./frontend
+  #     context: ./apps/frontend
   #   container_name: controlplane-web
   #   ports:
   #     - "4000:3000"

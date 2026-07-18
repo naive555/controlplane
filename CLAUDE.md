@@ -4,7 +4,7 @@
 
 **controlplane** — a monorepo rewrite of `controlplane-api` (Bun + ElysiaJS, located at `../controlplane-api`) into **Go (backend) + Next.js (frontend)**. It is a multi-tenant B2B SaaS platform template: JWT auth with refresh-token rotation, organizations/memberships, custom RBAC with wildcard permissions, immutable audit logs, and subscription plan-limit enforcement. Business domains get added on top of this core.
 
-**Status**: planning/scaffolding stage. `backend/` and `frontend/` are empty; `docs/` holds the analysis and migration plan. Read `docs/` before implementing anything.
+**Status**: Phase 0 scaffold complete. `apps/backend/` and `apps/frontend/` are runnable skeletons (health endpoint, placeholder page); business logic is not implemented yet. `docs/` holds the analysis and migration plan. Read `docs/` before implementing anything.
 
 ## Decided stack (do not re-litigate without the owner)
 
@@ -15,9 +15,9 @@
 ## Layout
 
 ```
-backend/    Go API — cmd/api, internal/{config,server,middleware,module,infra,shared}, migrations/
-frontend/   Next.js dashboard
-docs/       01-source-analysis · 02-api-contract · 03-target-architecture · 04-migration-plan
+apps/backend/    Go API — cmd/api, internal/{config,server,middleware,module,infra,shared}, migrations/
+apps/frontend/   Next.js dashboard
+docs/            01-source-analysis · 02-api-contract · 03-target-architecture · 04-migration-plan
 ```
 
 ## Ground rules
@@ -40,7 +40,7 @@ make sqlc      # regen query code  make test   # go test + frontend tests
 make lint      # golangci-lint + eslint
 ```
 
-Backend-only during early phases: `cd backend && go run ./cmd/api`, `go test ./...`.
+Backend-only during early phases: `cd apps/backend && go run ./cmd/api`, `go test ./...`.
 
 ## Environment
 

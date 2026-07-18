@@ -19,29 +19,29 @@ dev:
 
 ## Run the Go API (requires `make up` first and a .env file)
 api:
-	cd backend && go run ./cmd/api
+	cd apps/backend && go run ./cmd/api
 
 ## Run the Next.js dev server
 web:
-	cd frontend && pnpm dev
+	cd apps/frontend && pnpm dev
 
 ## Build backend binary and frontend production build
 build:
-	cd backend && go build -o bin/api ./cmd/api
-	cd frontend && pnpm build
+	cd apps/backend && go build -o bin/api ./cmd/api
+	cd apps/frontend && pnpm build
 
 ## Run backend tests
 test:
-	cd backend && go test ./...
+	cd apps/backend && go test ./...
 
 ## Vet the backend (golangci-lint added in a later phase)
 lint:
-	cd backend && go vet ./...
+	cd apps/backend && go vet ./...
 
 ## Tidy go.mod/go.sum
 tidy:
-	cd backend && go mod tidy
+	cd apps/backend && go mod tidy
 
 ## Format Go source
 fmt:
-	cd backend && go fmt ./...
+	cd apps/backend && go fmt ./...
