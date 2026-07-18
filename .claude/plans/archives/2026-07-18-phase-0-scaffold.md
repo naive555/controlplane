@@ -1,5 +1,11 @@
 # Phase 0 — Scaffold (execution plan for Sonnet)
 
+> **ARCHIVED — completed 2026-07-18.** All 5 steps executed and verified (build/vet/test green, live health-check + graceful-shutdown checks, Docker images built and run). Two follow-up changes landed *after* this plan and are not reflected in the text below:
+> - `backend/`/`frontend/` were moved to `apps/backend/`/`apps/frontend/` (monorepo nesting).
+> - The frontend package manager was switched from npm to pnpm.
+>
+> Current layout/commands are documented in the root `README.md` and `CLAUDE.md`, not this file. Kept here as a historical record only.
+
 > **Read first:** `docs/01-source-analysis.md`, `docs/02-api-contract.md`, `docs/03-target-architecture.md`, `docs/04-migration-plan.md`, and `CLAUDE.md`. This plan implements **Phase 0 only** (the "Scaffold" phase from `docs/04-migration-plan.md`). Do NOT start auth, DB queries, or business logic — those are Phases 1+.
 >
 > **Goal of Phase 0:** a runnable skeleton. From a clean clone, `make up && make dev` starts Postgres + Redis + a Go API that serves `GET /health` returning `{"status":"ok","uptime":<seconds>}`, plus an empty Next.js app. No auth, no migrations content, no real DB queries yet — just the wiring that everything else hangs off.
