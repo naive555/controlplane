@@ -23,12 +23,12 @@ api:
 
 ## Run the Next.js dev server
 web:
-	cd frontend && npm run dev
+	cd frontend && pnpm dev
 
 ## Build backend binary and frontend production build
 build:
 	cd backend && go build -o bin/api ./cmd/api
-	cd frontend && npm run build
+	cd frontend && pnpm build
 
 ## Run backend tests
 test:
