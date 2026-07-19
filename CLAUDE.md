@@ -4,7 +4,7 @@
 
 **controlplane** — a monorepo rewrite of `controlplane-api` (Bun + ElysiaJS, located at `../controlplane-api`) into **Go (backend) + Next.js (frontend)**. It is a multi-tenant B2B SaaS platform template: JWT auth with refresh-token rotation, organizations/memberships, custom RBAC with wildcard permissions, immutable audit logs, and subscription plan-limit enforcement. Business domains get added on top of this core.
 
-**Status**: Phase 1 (data layer) complete. Schema is migrated via goose (byte-identical to the source Drizzle SQL), `make seed` inserts the 3 default plans, and sqlc-generated queries exist for `users`/`sessions`/`plans` behind a `database.Store` (pool + `*db.Queries` + `WithTx`). No HTTP business logic yet — auth/org/RBAC/audit/subscription handlers land in Phases 2–4. See [`README.md`](README.md) for the quickstart to run it. `docs/` holds the analysis and migration plan. Read `docs/` before implementing anything.
+**Status**: Phase 2 (auth) complete. `/auth/{register,login,refresh,logout}` are live: bcrypt (cost 12) password hashing, HS256 JWT access/refresh pair issuance, session create + rotation with token-family reuse detection (a reused/revoked refresh token revokes its whole family), Redis-backed access-token blacklist and login rate limiting (5 attempts / 15 min), and best-effort audit logging of `user.register`/`user.login`. All four routes are public — no guards yet. Org/RBAC/audit-query/subscription handlers, and the `RequireAuth`/`RequireOrg`/`RequirePermission` middleware, land in Phases 3–4. See [`README.md`](README.md) for the quickstart to run it. `docs/` holds the analysis and migration plan. Read `docs/` before implementing anything.
 
 ## Decided stack (do not re-litigate without the owner)
 

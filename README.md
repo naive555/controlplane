@@ -2,7 +2,7 @@
 
 A monorepo rewrite of [`controlplane-api`](../controlplane-api) (Bun + ElysiaJS) into **Go (backend) + Next.js (frontend)** — a multi-tenant B2B SaaS platform template (auth, organizations, RBAC, audit logs, subscription limits). See [`docs/`](docs/) for the full analysis, API contract, target architecture, and migration plan, and [`CLAUDE.md`](CLAUDE.md) for ground rules.
 
-**Status**: Phase 1 (data layer) complete — schema migrated via goose, default plans seeded, sqlc queries for users/sessions/plans. No auth/business logic yet.
+**Status**: Phase 2 (auth) complete — `/auth/register`, `/auth/login`, `/auth/refresh`, and `/auth/logout` are live (bcrypt, JWT access/refresh pairs, session rotation with reuse detection, Redis blacklist + login rate limiting). Org/RBAC/audit-query/subscription endpoints and auth guards land in Phases 3–4.
 
 ## Prerequisites
 
@@ -25,6 +25,33 @@ curl localhost:3000/health
 ```
 
 Regenerating sqlc query code (only needed after editing `apps/backend/internal/infra/database/queries/*.sql`) requires the `sqlc` CLI: `go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest`, then `make sqlc`.
+
+### Try the auth flow
+
+With `make api` running:
+
+```bash
+# register (returns { accessToken, refreshToken })
+curl -s localhost:3000/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"you@example.com","password":"password123"}'
+
+# login
+curl -s localhost:3000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"you@example.com","password":"password123"}'
+
+# refresh (rotates the refresh token; reusing the old one after this fails with 401)
+curl -s localhost:3000/auth/refresh \
+  -H 'Content-Type: application/json' \
+  -d '{"refreshToken":"<refreshToken from above>"}'
+
+# logout (blacklists the access token, revokes all sessions)
+curl -s localhost:3000/auth/logout \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <accessToken>' \
+  -d '{"refreshToken":"<refreshToken>"}'
+```
 
 ## Layout
 
