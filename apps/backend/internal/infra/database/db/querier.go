@@ -11,6 +11,7 @@ import (
 )
 
 type Querier interface {
+	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	GetPlanByName(ctx context.Context, name string) (Plan, error)
