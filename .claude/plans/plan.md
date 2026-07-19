@@ -235,13 +235,13 @@ Methods (return `apperror.New(code)` on the documented failures; distinguish "no
   4. `audit.Record(ctx, ActionUserLogin, &user.ID, nil, nil)`.
   5. return user.
 
-- **`RotateSession(ctx, oldRefreshToken, newRefreshToken string, expiresAt time.Time) (uuid.UUID, error)`** — **runs in a `WithTx`**:
-  1. `GetSessionByRefreshToken(oldRefreshToken)`; not found → `apperror.New(apperror.InvalidRefreshToken)`.
-  2. If `session.IsRevoked` → `RevokeSessionFamily(session.Family)` then `apperror.New(apperror.RefreshTokenReuse)`. **(reuse detection — revoke the whole family.)**
+- **`RotateSession(ctx, oldRefreshToken, newRefreshToken string, expiresAt time.Time) (uuid.UUID, error)`**:
+  1. `GetSessionByRefreshToken(oldRefreshToken)` — **outside any transaction**; not found → `apperror.New(apperror.InvalidRefreshToken)`.
+  2. If `session.IsRevoked` → `store.RevokeSessionFamily(session.Family)` (standalone call, **not** inside a `WithTx`) then `apperror.New(apperror.RefreshTokenReuse)`. **(reuse detection — revoke the whole family.)**
   3. If `session.ExpiresAt.Before(time.Now())` → `apperror.New(apperror.RefreshTokenExpired)`.
-  4. `RevokeSessionByID(session.ID)`; `CreateSession{UserID: session.UserID, RefreshToken: newRefreshToken, Family: session.Family, ExpiresAt: expiresAt}`.
+  4. Only now, wrap the two-write happy path in `store.WithTx(ctx, func(q *db.Queries) error { ... })`: `RevokeSessionByID(session.ID)`; `CreateSession{UserID: session.UserID, RefreshToken: newRefreshToken, Family: session.Family, ExpiresAt: expiresAt}`.
   5. return `session.UserID`.
-  > Wrap steps 1–4 in `store.WithTx(ctx, func(q *db.Queries) error { ... })` so the revoke-family / revoke-old+insert-new writes are atomic. Capture the userID via a closure variable.
+  > **Do NOT wrap steps 1–3 in `WithTx`.** `Store.WithTx` rolls back the transaction whenever its callback returns a non-nil error (commits only on `nil`). If the reuse-detection `RevokeSessionFamily` call and the `return apperror.RefreshTokenReuse` live inside the same `WithTx` callback, the rollback silently undoes the family revocation — reuse detection would appear to work (401 returned) but never actually persist, so a subsequent refresh with a family-mate token would wrongly succeed. Caught live during Phase 2 execution: refreshing a revoked token's family-mate returned 200 instead of 401 until this was fixed. `RevokeSessionFamily` is a single `UPDATE`, already atomic on its own — it needs no transaction. Only the true multi-step write (revoke-old + create-new) goes in `WithTx`, and that callback only ever returns `nil` or a genuine DB error, never a business `apperror` — so `WithTx`'s commit-on-nil-only contract stays correct. This also matches the source more closely: `rotateSession` in `service.ts` has no explicit transaction at all.
 
 - **`CreateSession(ctx, userID uuid.UUID, refreshToken string, family uuid.UUID, expiresAt time.Time) error`** — thin wrapper over `store.CreateSession` (used by register/login).
 

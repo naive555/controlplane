@@ -139,50 +139,52 @@ func (s *Service) Login(ctx context.Context, email, password string) (db.User, e
 // atomically revokes it and inserts newRefreshToken in its place. Mirrors
 // AuthService.rotateSession exactly, including check order: not-found,
 // then reuse, then expiry.
+//
+// Only the revoke-old+create-new pair runs inside a transaction. The
+// not-found/reuse/expiry checks return a business apperror on failure, and
+// Store.WithTx rolls back the transaction whenever its callback returns a
+// non-nil error — so a RevokeSessionFamily call made inside the same
+// transaction as a "return apperror.RefreshTokenReuse" would be silently
+// undone by that rollback. Keeping the reuse-family revocation as its own
+// statement (already atomic on its own) outside any transaction avoids that.
 func (s *Service) RotateSession(ctx context.Context, oldRefreshToken, newRefreshToken string, expiresAt time.Time) (uuid.UUID, error) {
-	var userID uuid.UUID
-
-	err := s.store.WithTx(ctx, func(q *db.Queries) error {
-		session, err := q.GetSessionByRefreshToken(ctx, oldRefreshToken)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return apperror.New(apperror.InvalidRefreshToken)
-			}
-			return err
+	session, err := s.store.GetSessionByRefreshToken(ctx, oldRefreshToken)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, apperror.New(apperror.InvalidRefreshToken)
 		}
+		return uuid.Nil, err
+	}
 
-		if session.IsRevoked {
-			if err := q.RevokeSessionFamily(ctx, session.Family); err != nil {
-				return err
-			}
-			return apperror.New(apperror.RefreshTokenReuse)
+	if session.IsRevoked {
+		if err := s.store.RevokeSessionFamily(ctx, session.Family); err != nil {
+			return uuid.Nil, err
 		}
+		return uuid.Nil, apperror.New(apperror.RefreshTokenReuse)
+	}
 
-		if session.ExpiresAt.Before(time.Now()) {
-			return apperror.New(apperror.RefreshTokenExpired)
-		}
+	if session.ExpiresAt.Before(time.Now()) {
+		return uuid.Nil, apperror.New(apperror.RefreshTokenExpired)
+	}
 
+	err = s.store.WithTx(ctx, func(q *db.Queries) error {
 		if err := q.RevokeSessionByID(ctx, session.ID); err != nil {
 			return err
 		}
 
-		if _, err := q.CreateSession(ctx, db.CreateSessionParams{
+		_, err := q.CreateSession(ctx, db.CreateSessionParams{
 			UserID:       session.UserID,
 			RefreshToken: newRefreshToken,
 			Family:       session.Family,
 			ExpiresAt:    expiresAt,
-		}); err != nil {
-			return err
-		}
-
-		userID = session.UserID
-		return nil
+		})
+		return err
 	})
 	if err != nil {
 		return uuid.Nil, err
 	}
 
-	return userID, nil
+	return session.UserID, nil
 }
 
 // CreateSession inserts a new session row, used by register/login to

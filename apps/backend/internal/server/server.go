@@ -14,14 +14,18 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/controlplane/backend/internal/config"
+	"github.com/controlplane/backend/internal/infra/database"
+	appredis "github.com/controlplane/backend/internal/infra/redis"
 	appmw "github.com/controlplane/backend/internal/middleware"
+	"github.com/controlplane/backend/internal/module/auditlog"
+	"github.com/controlplane/backend/internal/module/auth"
 	"github.com/controlplane/backend/internal/module/health"
 	"github.com/controlplane/backend/internal/shared/apperror"
 )
 
 // New builds a fully configured Echo instance: middleware stack, custom
-// error handler, and public routes. Auth-guarded routes are added in
-// Phase 2+.
+// error handler, infra-backed module wiring, and route registration.
+// RequireAuth/RequireOrg/RequirePermission guards land in Phase 3.
 func New(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool, rdb *redis.Client) *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
@@ -35,6 +39,14 @@ func New(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool, rdb *redis.Cl
 	e.Use(requestLogger(log))
 
 	health.NewHandler().Register(e)
+
+	store := database.NewStore(pool)
+	redisAuth := appredis.NewAuth(rdb)
+	tokenSvc := auth.NewTokenService(cfg)
+	auditSvc := auditlog.NewService(store, log)
+	authSvc := auth.NewService(store, redisAuth, auditSvc)
+	authHandler := auth.NewHandler(authSvc, tokenSvc, store, redisAuth, cfg.JWTRefreshExpiresIn)
+	authHandler.Register(e.Group("/auth"))
 
 	return e
 }
