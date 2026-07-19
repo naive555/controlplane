@@ -1,4 +1,4 @@
-.PHONY: up down dev api web build test lint tidy fmt migrate migrate-down migrate-status sqlc
+.PHONY: up down dev api web build test lint tidy fmt migrate migrate-down migrate-status sqlc seed
 
 ## Start Postgres + Redis in the background
 up:
@@ -32,6 +32,10 @@ migrate-down:
 ## Show migration status
 migrate-status:
 	cd apps/backend && go run ./cmd/migrate status
+
+## Seed default plans (free / pro / enterprise) — idempotent
+seed:
+	cd apps/backend && go run ./cmd/seed
 
 ## Run the Next.js dev server
 web:
