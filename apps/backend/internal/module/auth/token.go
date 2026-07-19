@@ -80,7 +80,7 @@ func (t *TokenService) SignRefreshToken(userID uuid.UUID) (string, error) {
 // as an error; handlers map it to 401 "Invalid refresh token".
 func (t *TokenService) VerifyRefreshToken(tokenString string) (uuid.UUID, error) {
 	claims := &refreshClaims{}
-	_, err := jwt.ParseWithClaims(tokenString, claims, func(*jwt.Token) (interface{}, error) {
+	_, err := jwt.ParseWithClaims(tokenString, claims, func(*jwt.Token) (any, error) {
 		return t.refreshSecret, nil
 	}, jwt.WithValidMethods([]string{"HS256"}))
 	if err != nil {
