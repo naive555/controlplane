@@ -27,6 +27,10 @@ var (
 // src/modules/auth/service.ts.
 const maxLoginAttempts = 5
 
+// bcryptCost mirrors SALT_ROUNDS in the source app's
+// src/modules/auth/service.ts (bcryptjs cost 12).
+const bcryptCost = 12
+
 // authStore is the subset of *database.Store the auth service depends on,
 // narrowed so unit tests can hand-mock it without implementing the full
 // db.Querier surface. *database.Store satisfies this (it embeds *db.Queries

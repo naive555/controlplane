@@ -26,3 +26,8 @@ type TokenResponse struct {
 	AccessToken  string `json:"accessToken"`
 	RefreshToken string `json:"refreshToken"`
 }
+
+// LogoutResponse is the response body for POST /auth/logout.
+type LogoutResponse struct {
+	Success bool `json:"success"`
+}
