@@ -28,6 +28,7 @@ func New(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool, rdb *redis.Cl
 	e.HidePort = true
 
 	e.HTTPErrorHandler = newErrorHandler(log)
+	e.Validator = newRequestValidator()
 
 	e.Use(echomw.Recover())
 	e.Use(appmw.RequestID())
@@ -46,12 +47,10 @@ type errorBody struct {
 
 // newErrorHandler returns Echo's global error handler. It maps:
 //   - *apperror.Error   -> apperror.Resolve(code)
-//   - *echo.HTTPError    -> its status/message (404 normalized to "Route not found")
+//   - *echo.HTTPError    -> its status/message (404 normalized to "Route not found";
+//     handlers use httpx.BindAndValidate to produce 400 "Invalid request body" /
+//     422 "Validation failed" as *echo.HTTPError)
 //   - anything else      -> logged at error level, 500 "Internal server error"
-//
-// TODO(phase2): distinguish body-validation failures (422 "Validation
-// failed") from malformed-JSON parse failures (400 "Invalid request body")
-// once request bodies are introduced.
 func newErrorHandler(log *slog.Logger) echo.HTTPErrorHandler {
 	return func(err error, c echo.Context) {
 		if c.Response().Committed {
