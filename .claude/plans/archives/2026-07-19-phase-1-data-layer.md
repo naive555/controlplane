@@ -1,5 +1,18 @@
 # Phase 1 — Data layer (execution plan for Sonnet)
 
+> **ARCHIVED — completed 2026-07-19.** All 7 steps executed and verified against a live Postgres 16 + Redis 7 (docker compose):
+> - Migrations ported to goose (`00001`–`00005`), DDL confirmed statement-identical to the source Drizzle SQL; full up/down/up round-trip verified live.
+> - `cmd/migrate` (embedded FS, no external goose CLI needed) + `make migrate`/`migrate-down`/`migrate-status`.
+> - sqlc wired up (`sqlc.yaml`, queries for `users`/`sessions`/`plans`, generated code committed). Note: the `timestamp` override required the `pg_catalog.timestamp` db_type key — a bare `"timestamp"` is silently ignored by sqlc's postgresql engine.
+> - `database.Store` (pool + `*db.Queries` + `WithTx`) added; `cmd/api` boot flow deliberately left untouched per scope.
+> - `cmd/seed` inserts free/pro/enterprise idempotently; verified live (second run is a no-op).
+> - Integration test (`database_test.go`, gated on `DATABASE_URL`) covers the full user/session/plan round-trip; verified passing both with and without the env var set.
+> - CI (`ci.yml`) updated with postgres/redis service containers + a migrate step; validated as well-formed YAML and the whole backend job simulated locally end-to-end.
+> - `CLAUDE.md`/`README.md` status and command references updated.
+> - Confirmed no regression: `/health` and the global 404 body are byte-identical to Phase 0.
+>
+> Current layout/commands are documented in the root `README.md` and `CLAUDE.md`, not this file. Kept here as a historical record only.
+
 > **Read first:** `docs/01-source-analysis.md`, `docs/02-api-contract.md`, `docs/03-target-architecture.md`, `docs/04-migration-plan.md`, and `CLAUDE.md`. This plan implements **Phase 1 only** (the "Data layer" phase from `docs/04-migration-plan.md`). Phase 0 (scaffold) is complete and merged. Do NOT start auth handlers/services, JWT, bcrypt, Redis auth helpers, or any business logic — those are Phase 2+.
 >
 > **Goal of Phase 1:** turn the empty DB wiring from Phase 0 into a real, migrated, query-able data layer. After this phase, from a clean clone:
