@@ -164,11 +164,12 @@ sql:
         overrides:
           - db_type: "uuid"
             go_type: "github.com/google/uuid.UUID"
-          - db_type: "timestamp"
+          - db_type: "pg_catalog.timestamp"
             go_type: "time.Time"
           - db_type: "jsonb"
             go_type: "encoding/json.RawMessage"
 ```
+> Note: the `pg_catalog.` prefix is required for the `timestamp` override to take effect — a bare `db_type: "timestamp"` is silently ignored by sqlc's postgresql engine (verified empirically). `uuid` and `jsonb` do not need the prefix.
 Notes:
 - `schema: "migrations"` — sqlc understands the `-- +goose Up`/`Down` annotations and applies only the Up DDL. Do not maintain a second schema file.
 - `emit_interface: true` is required so Phase 2 can mock `db.Querier` for service unit tests (per CLAUDE testing expectations).

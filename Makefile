@@ -1,4 +1,4 @@
-.PHONY: up down dev api web build test lint tidy fmt migrate migrate-down migrate-status
+.PHONY: up down dev api web build test lint tidy fmt migrate migrate-down migrate-status sqlc
 
 ## Start Postgres + Redis in the background
 up:
@@ -57,3 +57,7 @@ tidy:
 ## Format Go source
 fmt:
 	cd apps/backend && go fmt ./...
+
+## Regenerate sqlc query code (requires sqlc installed: go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest)
+sqlc:
+	cd apps/backend && sqlc generate
