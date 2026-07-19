@@ -1,4 +1,4 @@
-.PHONY: up down dev api web build test lint tidy fmt
+.PHONY: up down dev api web build test lint tidy fmt migrate migrate-down migrate-status
 
 ## Start Postgres + Redis in the background
 up:
@@ -20,6 +20,18 @@ dev:
 ## Run the Go API (requires `make up` first and a .env file)
 api:
 	cd apps/backend && go run ./cmd/api
+
+## Apply all pending database migrations
+migrate:
+	cd apps/backend && go run ./cmd/migrate up
+
+## Roll back the most recent migration
+migrate-down:
+	cd apps/backend && go run ./cmd/migrate down
+
+## Show migration status
+migrate-status:
+	cd apps/backend && go run ./cmd/migrate status
 
 ## Run the Next.js dev server
 web:
