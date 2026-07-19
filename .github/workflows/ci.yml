@@ -13,6 +13,35 @@ jobs:
     defaults:
       run:
         working-directory: apps/backend
+    env:
+      DATABASE_URL: postgres://username:password@localhost:5432/controlplane?sslmode=disable
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: ci-access-secret-not-a-real-secret-32c
+      JWT_REFRESH_SECRET: ci-refresh-secret-not-a-real-secret-32
+
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: username
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: controlplane
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U username"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Checkout
@@ -31,6 +60,9 @@ jobs:
 
       - name: Build
         run: go build ./...
+
+      - name: Migrate
+        run: go run ./cmd/migrate up
 
       - name: Test
         run: go test ./...
