@@ -163,7 +163,13 @@ func (s *Service) RotateSession(ctx context.Context, oldRefreshToken, newRefresh
 		return uuid.Nil, apperror.New(apperror.RefreshTokenReuse)
 	}
 
-	if session.ExpiresAt.Before(time.Now()) {
+	// sessions.expires_at is "timestamp without time zone": pgx scans it as
+	// a UTC-tagged time.Time regardless of what zone was originally
+	// written. Comparing against a local time.Now() would silently shift
+	// the boundary by the server's UTC offset (verified live: on a UTC+7
+	// host, an intentionally-expired fixture read back as ~7h in the
+	// future and this check incorrectly passed). Both sides must be UTC.
+	if session.ExpiresAt.Before(time.Now().UTC()) {
 		return uuid.Nil, apperror.New(apperror.RefreshTokenExpired)
 	}
 

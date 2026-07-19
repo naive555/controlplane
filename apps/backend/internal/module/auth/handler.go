@@ -112,7 +112,9 @@ func (h *Handler) refresh(c echo.Context) error {
 		return err
 	}
 
-	rotatedUserID, err := h.service.RotateSession(c.Request().Context(), req.RefreshToken, newRefreshToken, time.Now().Add(h.refreshTTL))
+	// UTC: sessions.expires_at is "timestamp without time zone" — see the
+	// comment on the equivalent expiry check in service.go.
+	rotatedUserID, err := h.service.RotateSession(c.Request().Context(), req.RefreshToken, newRefreshToken, time.Now().UTC().Add(h.refreshTTL))
 	if err != nil {
 		return err
 	}
@@ -171,8 +173,10 @@ func (h *Handler) issueTokenPair(c echo.Context, userID uuid.UUID, email string)
 		return err
 	}
 
+	// UTC: sessions.expires_at is "timestamp without time zone" — see the
+	// comment on the equivalent expiry check in service.go.
 	family := uuid.New()
-	if err := h.service.CreateSession(ctx, userID, refreshToken, family, time.Now().Add(h.refreshTTL)); err != nil {
+	if err := h.service.CreateSession(ctx, userID, refreshToken, family, time.Now().UTC().Add(h.refreshTTL)); err != nil {
 		return err
 	}
 
