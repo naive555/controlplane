@@ -1,6 +1,6 @@
-// Package auditlog records best-effort audit trail entries, mirroring
-// AuditLogService in the source app (src/modules/audit-log/service.ts).
-// Query endpoints land in Phase 4 — this phase only writes.
+// Package auditlog records best-effort audit trail entries and serves the
+// audit-log query endpoint, mirroring AuditLogService in the source app
+// (src/modules/audit-log/service.ts).
 package auditlog
 
 import (
@@ -13,13 +13,19 @@ import (
 	"github.com/controlplane/backend/internal/infra/database/db"
 )
 
-// Recorded audit actions. Mirrors AuditAction in the source app; role
-// actions are added in Phase 4.
+// Recorded audit actions. Mirrors AuditAction in the source app.
+// ActionOrgMemberRemoved, ActionRoleCreated, and ActionRoleAssigned are
+// defined for parity but never written, matching the source and
+// docs/02-api-contract.md ("defined but only the first four are currently
+// written").
 const (
 	ActionUserLogin        = "user.login"
 	ActionUserRegister     = "user.register"
 	ActionOrgCreated       = "org.created"
 	ActionOrgMemberInvited = "org.member.invited"
+	ActionOrgMemberRemoved = "org.member.removed"
+	ActionRoleCreated      = "role.created"
+	ActionRoleAssigned     = "role.assigned"
 )
 
 // Service records audit log entries. Writes are best-effort: a failure is
@@ -52,6 +58,18 @@ func (s *Service) Record(ctx context.Context, action string, userID, organizatio
 	if err != nil {
 		s.log.Error("failed to record audit log", "error", err, "action", action)
 	}
+}
+
+// Query returns organizationID's audit logs newest-first, optionally
+// filtered by userID and/or action, capped at limit rows. Mirrors
+// AuditLogService.query.
+func (s *Service) Query(ctx context.Context, organizationID uuid.UUID, userID *uuid.UUID, action *string, limit int32) ([]db.AuditLog, error) {
+	return s.q.QueryAuditLogs(ctx, db.QueryAuditLogsParams{
+		OrganizationID: toPgUUID(&organizationID),
+		UserID:         toPgUUID(userID),
+		Action:         action,
+		Lim:            limit,
+	})
 }
 
 func toPgUUID(id *uuid.UUID) pgtype.UUID {
