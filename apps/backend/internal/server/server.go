@@ -1,5 +1,5 @@
 // Package server wires the Echo instance: middleware, error handling, and
-// route registration. Module handlers plug into New in later phases.
+// route registration for the full API.
 package server
 
 import (
@@ -28,7 +28,6 @@ import (
 
 // New builds a fully configured Echo instance: middleware stack, custom
 // error handler, infra-backed module wiring, and route registration.
-// RequirePermission (RBAC) lands in Phase 4.
 func New(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool, rdb *redis.Client) *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
@@ -58,6 +57,10 @@ func New(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool, rdb *redis.Cl
 	orgSvc := organization.NewService(store, auditSvc, subSvc)
 	orgHandler := organization.NewHandler(orgSvc)
 	orgHandler.Register(e.Group("/organizations"), guards)
+
+	rbac.NewHandler(rbacSvc).Register(e.Group("/rbac"), guards)
+	subscription.NewHandler(subSvc).Register(e.Group("/subscription"), guards)
+	auditlog.NewHandler(auditSvc).Register(e.Group("/audit-logs"), guards)
 
 	return e
 }
