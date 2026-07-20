@@ -11,13 +11,21 @@ import (
 )
 
 type Querier interface {
+	CountMembershipsByOrg(ctx context.Context, organizationID uuid.UUID) (int64, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
+	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
+	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) error
+	GetMembership(ctx context.Context, arg GetMembershipParams) (Membership, error)
+	GetOrgSubscriptionWithPlan(ctx context.Context, organizationID uuid.UUID) (GetOrgSubscriptionWithPlanRow, error)
+	GetOrganizationBySlug(ctx context.Context, slug string) (Organization, error)
 	GetPlanByName(ctx context.Context, name string) (Plan, error)
 	GetSessionByRefreshToken(ctx context.Context, refreshToken string) (Session, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	ListMembershipsByUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsByUserRow, error)
 	RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) error
 	RevokeSessionByID(ctx context.Context, id uuid.UUID) error
 	RevokeSessionFamily(ctx context.Context, family uuid.UUID) error
