@@ -13,11 +13,13 @@ import (
 	"github.com/controlplane/backend/internal/infra/database/db"
 )
 
-// Recorded audit actions. Mirrors AuditAction in the source app; org/role
-// actions are added in the phases that produce them (3–4).
+// Recorded audit actions. Mirrors AuditAction in the source app; role
+// actions are added in Phase 4.
 const (
-	ActionUserLogin    = "user.login"
-	ActionUserRegister = "user.register"
+	ActionUserLogin        = "user.login"
+	ActionUserRegister     = "user.register"
+	ActionOrgCreated       = "org.created"
+	ActionOrgMemberInvited = "org.member.invited"
 )
 
 // Service records audit log entries. Writes are best-effort: a failure is
