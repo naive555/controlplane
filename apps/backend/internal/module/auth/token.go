@@ -99,3 +99,29 @@ func (t *TokenService) VerifyRefreshToken(tokenString string) (uuid.UUID, error)
 
 	return userID, nil
 }
+
+// VerifyAccessToken parses and validates an access token's HS256 signature
+// with the access secret and returns its subject (user id) and embedded
+// email. Any parse/signature/expiry failure or missing subject is returned
+// as an error; the auth guard maps it to 401 "Unauthorized".
+func (t *TokenService) VerifyAccessToken(tokenString string) (uuid.UUID, string, error) {
+	claims := &accessClaims{}
+	_, err := jwt.ParseWithClaims(tokenString, claims, func(*jwt.Token) (any, error) {
+		return t.accessSecret, nil
+	}, jwt.WithValidMethods([]string{"HS256"}))
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+
+	sub, err := claims.GetSubject()
+	if err != nil || sub == "" {
+		return uuid.Nil, "", errors.New("access token missing subject")
+	}
+
+	userID, err := uuid.Parse(sub)
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+
+	return userID, claims.Email, nil
+}
