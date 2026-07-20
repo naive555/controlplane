@@ -1,5 +1,20 @@
 # Phase 3 — Org + Auth Guards — Implementation Plan
 
+> **ARCHIVED — completed 2026-07-20.** All 10 execution steps done and verified live against real Postgres 16 + Redis 7 (docker compose), plus a Step 11 full verification pass:
+> - sqlc: 3 new query files (`organizations.sql`, `memberships.sql`, `subscriptions.sql`) → 8 new generated methods, all listed in `db.Querier`.
+> - `TokenService.VerifyAccessToken`: HS256 access-token verification (subject + email), mirroring `VerifyRefreshToken`.
+> - `internal/middleware/auth.go`: `Guards.RequireAuth()`/`RequireOrg()`, reproducing `plugin.ts`'s `verifyToken` exactly — including the blacklist-checked-*before*-signature ordering. Typed context getters (`UserID`, `UserEmail`, `OrgID`, `MembershipFromContext`). Deviation from source (documented in-code): a `GetMembership` lookup failure that isn't "no matching row" propagates as 500 instead of folding into the 403 "Not a member" response.
+> - `internal/module/auditlog`: added `ActionOrgCreated` (`org.created`), `ActionOrgMemberInvited` (`org.member.invited`); `org.member.removed` stays unwritten, matching the contract.
+> - `internal/module/subscription`: minimal `Service.GetLimit`/`EnforceLimit` (plan `limits` overlaid by `custom_limits`, `-1`/no-subscription = unlimited) — just enough for the invite flow's `max_members` check. The `/subscription` HTTP endpoints are still Phase 4.
+> - `internal/module/organization`: `Create` (slug-check + org + owner-membership in one `WithTx`, then best-effort audit), `ListByUser`, `Invite` (role → limit → user-lookup → already-member, matching `OrgService.invite`'s check order), `RemoveMember` (role → target-lookup → cannot-remove-owner, no audit — matches source). Four routes wired to the guards in `server.New`.
+> - Validator: registered a custom `orgslug` rule (`^[a-z0-9-]+$`) via `validator.RegisterValidation`.
+> - Tests: 10 guard unit tests + 9 org-service unit tests + 8 subscription unit tests + 6 token unit tests (all hand-mocked, no DB) + 4 integration test functions / 24 subtests (incl. an explicit "empty list serializes as `[]`, not `null`" wire-level check) — run against live Postgres+Redis via `docker compose up db redis`, all green with `-count=1`.
+> - No bugs found this phase. One false alarm investigated and dismissed: this environment's local `gofmt` binary has a reproducible quirk that wants to mangle a straight `''` into a curly `”` inside one specific comment pattern (`'Bearer ', ''`) — proved via raw byte inspection to be a pre-existing tool artifact (it hits the untouched Phase 2 file `internal/module/auth/handler.go` identically), not a real formatting issue. Left as-is; `go build`/`go vet` are the authoritative checks and both pass clean.
+> - `CLAUDE.md` / `README.md` updated: Phase 3 status, and an organizations curl walkthrough (create → list → invite → remove) added to the README quickstart.
+> - Confirmed no regression: all Phase 2 auth integration tests still pass unchanged.
+>
+> Current layout/commands/status are documented in the root `README.md` and `CLAUDE.md`, not this file. Kept here as a historical record only.
+
 > Execution plan for a Sonnet coding session. Follow the steps in order. Each step
 > lists the files to touch, the exact code/SQL to add, and how to verify it. Do not
 > re-litigate stack decisions (see `CLAUDE.md`). Source of truth for behavior is
