@@ -32,3 +32,51 @@ func (q *Queries) CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) 
 	)
 	return err
 }
+
+const queryAuditLogs = `-- name: QueryAuditLogs :many
+SELECT id, organization_id, user_id, action, metadata, created_at FROM audit_logs
+WHERE organization_id = $1
+  AND ($2::uuid IS NULL OR user_id = $2)
+  AND ($3::text IS NULL OR action = $3)
+ORDER BY created_at DESC
+LIMIT $4
+`
+
+type QueryAuditLogsParams struct {
+	OrganizationID pgtype.UUID `json:"organization_id"`
+	UserID         pgtype.UUID `json:"user_id"`
+	Action         *string     `json:"action"`
+	Lim            int32       `json:"lim"`
+}
+
+func (q *Queries) QueryAuditLogs(ctx context.Context, arg QueryAuditLogsParams) ([]AuditLog, error) {
+	rows, err := q.db.Query(ctx, queryAuditLogs,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.Action,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AuditLog
+	for rows.Next() {
+		var i AuditLog
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.UserID,
+			&i.Action,
+			&i.Metadata,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

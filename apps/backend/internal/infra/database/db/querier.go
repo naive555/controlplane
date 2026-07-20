@@ -11,24 +11,35 @@ import (
 )
 
 type Querier interface {
+	AssignMemberRole(ctx context.Context, arg AssignMemberRoleParams) error
 	CountMembershipsByOrg(ctx context.Context, organizationID uuid.UUID) (int64, error)
 	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) error
 	CreateMembership(ctx context.Context, arg CreateMembershipParams) (Membership, error)
 	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error)
+	CreatePermission(ctx context.Context, arg CreatePermissionParams) error
+	CreateRole(ctx context.Context, arg CreateRoleParams) (Role, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) error
+	DeletePermissionsByRole(ctx context.Context, roleID uuid.UUID) error
 	GetMembership(ctx context.Context, arg GetMembershipParams) (Membership, error)
+	GetOrgSubscription(ctx context.Context, organizationID uuid.UUID) (GetOrgSubscriptionRow, error)
 	GetOrgSubscriptionWithPlan(ctx context.Context, organizationID uuid.UUID) (GetOrgSubscriptionWithPlanRow, error)
 	GetOrganizationBySlug(ctx context.Context, slug string) (Organization, error)
 	GetPlanByName(ctx context.Context, name string) (Plan, error)
+	GetRoleByID(ctx context.Context, id uuid.UUID) (Role, error)
 	GetSessionByRefreshToken(ctx context.Context, refreshToken string) (Session, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	ListMembershipsByUser(ctx context.Context, userID uuid.UUID) ([]ListMembershipsByUserRow, error)
+	ListPermissionActionsByUserOrg(ctx context.Context, arg ListPermissionActionsByUserOrgParams) ([]string, error)
+	ListPermissionsByRoleIDs(ctx context.Context, dollar_1 []uuid.UUID) ([]Permission, error)
+	ListRolesByOrg(ctx context.Context, organizationID uuid.UUID) ([]Role, error)
+	QueryAuditLogs(ctx context.Context, arg QueryAuditLogsParams) ([]AuditLog, error)
 	RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) error
 	RevokeSessionByID(ctx context.Context, id uuid.UUID) error
 	RevokeSessionFamily(ctx context.Context, family uuid.UUID) error
+	UpsertOrgSubscription(ctx context.Context, arg UpsertOrgSubscriptionParams) error
 	UpsertPlan(ctx context.Context, arg UpsertPlanParams) error
 }
 
