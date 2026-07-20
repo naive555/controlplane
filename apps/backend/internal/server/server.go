@@ -20,12 +20,14 @@ import (
 	"github.com/controlplane/backend/internal/module/auditlog"
 	"github.com/controlplane/backend/internal/module/auth"
 	"github.com/controlplane/backend/internal/module/health"
+	"github.com/controlplane/backend/internal/module/organization"
+	"github.com/controlplane/backend/internal/module/subscription"
 	"github.com/controlplane/backend/internal/shared/apperror"
 )
 
 // New builds a fully configured Echo instance: middleware stack, custom
 // error handler, infra-backed module wiring, and route registration.
-// RequireAuth/RequireOrg/RequirePermission guards land in Phase 3.
+// RequirePermission (RBAC) lands in Phase 4.
 func New(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool, rdb *redis.Client) *echo.Echo {
 	e := echo.New()
 	e.HideBanner = true
@@ -44,9 +46,16 @@ func New(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool, rdb *redis.Cl
 	redisAuth := appredis.NewAuth(rdb)
 	tokenSvc := auth.NewTokenService(cfg)
 	auditSvc := auditlog.NewService(store, log)
+
 	authSvc := auth.NewService(store, redisAuth, auditSvc)
 	authHandler := auth.NewHandler(authSvc, tokenSvc, store, redisAuth, cfg.JWTRefreshExpiresIn)
 	authHandler.Register(e.Group("/auth"))
+
+	guards := appmw.NewGuards(tokenSvc, redisAuth, store)
+	subSvc := subscription.NewService(store)
+	orgSvc := organization.NewService(store, auditSvc, subSvc)
+	orgHandler := organization.NewHandler(orgSvc)
+	orgHandler.Register(e.Group("/organizations"), guards)
 
 	return e
 }
