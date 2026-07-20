@@ -5,6 +5,7 @@ package auditlog
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 
 	"github.com/google/uuid"
@@ -77,4 +78,24 @@ func toPgUUID(id *uuid.UUID) pgtype.UUID {
 		return pgtype.UUID{}
 	}
 	return pgtype.UUID{Bytes: *id, Valid: true}
+}
+
+// fromPgUUID is the inverse of toPgUUID, used when serializing a row read
+// back from the database: an invalid (null) column becomes a nil pointer.
+func fromPgUUID(id pgtype.UUID) *uuid.UUID {
+	if !id.Valid {
+		return nil
+	}
+	u := uuid.UUID(id.Bytes)
+	return &u
+}
+
+// nonEmptyJSON coerces an empty/nil jsonb column to a nil json.RawMessage
+// so it marshals as JSON null; json.Marshal panics on a non-nil empty
+// []byte cast directly to json.RawMessage.
+func nonEmptyJSON(b []byte) json.RawMessage {
+	if len(b) == 0 {
+		return nil
+	}
+	return b
 }
