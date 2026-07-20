@@ -40,18 +40,25 @@ type membershipStore interface {
 	GetMembership(ctx context.Context, arg db.GetMembershipParams) (db.Membership, error)
 }
 
-// Guards builds the RequireAuth/RequireOrg middleware, replacing the
-// requireAuth/requireOrg Elysia macros in the source app's
-// src/modules/auth/plugin.ts. RequirePermission lands in Phase 4.
+// permissionChecker is the subset of *rbac.Service the RequirePermission
+// guard depends on.
+type permissionChecker interface {
+	HasPermission(ctx context.Context, userID, organizationID uuid.UUID, action string) (bool, error)
+}
+
+// Guards builds the RequireAuth/RequireOrg/RequirePermission middleware,
+// replacing the requireAuth/requireOrg/requirePermission Elysia macros in
+// the source app's src/modules/auth/plugin.ts.
 type Guards struct {
 	token     tokenVerifier
 	blacklist blacklistChecker
 	store     membershipStore
+	rbac      permissionChecker
 }
 
 // NewGuards builds a Guards from its narrow dependencies.
-func NewGuards(token tokenVerifier, blacklist blacklistChecker, store membershipStore) *Guards {
-	return &Guards{token: token, blacklist: blacklist, store: store}
+func NewGuards(token tokenVerifier, blacklist blacklistChecker, store membershipStore, rbac permissionChecker) *Guards {
+	return &Guards{token: token, blacklist: blacklist, store: store, rbac: rbac}
 }
 
 // verify reproduces plugin.ts's verifyToken exactly, including check order:
@@ -120,6 +127,59 @@ func (g *Guards) RequireOrg() echo.MiddlewareFunc {
 			if err != nil {
 				// A malformed id can never match a membership row.
 				return echo.NewHTTPError(http.StatusForbidden, "Not a member of this organization")
+			}
+
+			membership, err := g.store.GetMembership(c.Request().Context(), db.GetMembershipParams{
+				UserID:         UserID(c),
+				OrganizationID: orgID,
+			})
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return echo.NewHTTPError(http.StatusForbidden, "Not a member of this organization")
+				}
+				return err
+			}
+
+			c.Set(ctxOrgID, orgID)
+			c.Set(ctxMembership, membership)
+			return next(c)
+		}
+	}
+}
+
+// RequirePermission guards a route with RequireAuth plus an x-organization-id
+// header naming an org the caller has the given RBAC action in. Mirrors
+// plugin.ts requirePermission, including check order: the permission is
+// checked BEFORE membership is resolved, so a caller who fails the
+// permission check (including a non-member, since HasPermission returns
+// false for callers with no membership) gets 403 "Missing permission:
+// <action>", never "Not a member of this organization". No route in
+// docs/02-api-contract.md currently uses this guard — it exists for parity
+// with the source's macro and is exercised by unit tests only.
+func (g *Guards) RequirePermission(action string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if err := g.verify(c); err != nil {
+				return err
+			}
+
+			raw := c.Request().Header.Get(OrgHeader)
+			if raw == "" {
+				return echo.NewHTTPError(http.StatusBadRequest, "Missing x-organization-id header")
+			}
+
+			orgID, err := uuid.Parse(raw)
+			if err != nil {
+				// A malformed id can never grant a permission.
+				return echo.NewHTTPError(http.StatusForbidden, "Missing permission: "+action)
+			}
+
+			allowed, err := g.rbac.HasPermission(c.Request().Context(), UserID(c), orgID, action)
+			if err != nil {
+				return err
+			}
+			if !allowed {
+				return echo.NewHTTPError(http.StatusForbidden, "Missing permission: "+action)
 			}
 
 			membership, err := g.store.GetMembership(c.Request().Context(), db.GetMembershipParams{

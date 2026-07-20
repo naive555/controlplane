@@ -40,6 +40,14 @@ func (m *mockMembershipStore) GetMembership(ctx context.Context, arg db.GetMembe
 	return m.getMembership(ctx, arg)
 }
 
+type mockPermissionChecker struct {
+	hasPermission func(ctx context.Context, userID, organizationID uuid.UUID, action string) (bool, error)
+}
+
+func (m *mockPermissionChecker) HasPermission(ctx context.Context, userID, organizationID uuid.UUID, action string) (bool, error) {
+	return m.hasPermission(ctx, userID, organizationID, action)
+}
+
 // ---- helpers ----
 
 func newTestContext(method, target string, headers map[string]string) (echo.Context, *httptest.ResponseRecorder) {
@@ -77,6 +85,7 @@ func TestRequireAuth_MissingToken(t *testing.T) {
 		&mockTokenVerifier{},
 		&mockBlacklist{},
 		&mockMembershipStore{},
+		&mockPermissionChecker{},
 	)
 	c, _ := newTestContext(http.MethodGet, "/", nil)
 
@@ -99,6 +108,7 @@ func TestRequireAuth_BlacklistedTokenCheckedBeforeSignature(t *testing.T) {
 			isBlacklisted: func(ctx context.Context, token string) (bool, error) { return true, nil },
 		},
 		&mockMembershipStore{},
+		&mockPermissionChecker{},
 	)
 	c, _ := newTestContext(http.MethodGet, "/", map[string]string{
 		"Authorization": "Bearer not-even-a-jwt",
@@ -119,6 +129,7 @@ func TestRequireAuth_InvalidSignature(t *testing.T) {
 			isBlacklisted: func(ctx context.Context, token string) (bool, error) { return false, nil },
 		},
 		&mockMembershipStore{},
+		&mockPermissionChecker{},
 	)
 	c, _ := newTestContext(http.MethodGet, "/", map[string]string{
 		"Authorization": "Bearer some.jwt.token",
@@ -140,6 +151,7 @@ func TestRequireAuth_Success(t *testing.T) {
 			isBlacklisted: func(ctx context.Context, token string) (bool, error) { return false, nil },
 		},
 		&mockMembershipStore{},
+		&mockPermissionChecker{},
 	)
 	c, rec := newTestContext(http.MethodGet, "/", map[string]string{
 		"Authorization": "Bearer valid.jwt.token",
@@ -181,11 +193,12 @@ func validAuthGuardsForOrg(t *testing.T, userID uuid.UUID, membershipFn func(ctx
 			isBlacklisted: func(ctx context.Context, token string) (bool, error) { return false, nil },
 		},
 		&mockMembershipStore{getMembership: membershipFn},
+		&mockPermissionChecker{},
 	)
 }
 
 func TestRequireOrg_MissingToken(t *testing.T) {
-	g := NewGuards(&mockTokenVerifier{}, &mockBlacklist{}, &mockMembershipStore{})
+	g := NewGuards(&mockTokenVerifier{}, &mockBlacklist{}, &mockMembershipStore{}, &mockPermissionChecker{})
 	c, _ := newTestContext(http.MethodGet, "/", nil)
 
 	err := g.RequireOrg()(okNext)(c)

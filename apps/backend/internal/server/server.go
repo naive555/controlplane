@@ -21,6 +21,7 @@ import (
 	"github.com/controlplane/backend/internal/module/auth"
 	"github.com/controlplane/backend/internal/module/health"
 	"github.com/controlplane/backend/internal/module/organization"
+	"github.com/controlplane/backend/internal/module/rbac"
 	"github.com/controlplane/backend/internal/module/subscription"
 	"github.com/controlplane/backend/internal/shared/apperror"
 )
@@ -51,7 +52,8 @@ func New(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool, rdb *redis.Cl
 	authHandler := auth.NewHandler(authSvc, tokenSvc, store, redisAuth, cfg.JWTRefreshExpiresIn)
 	authHandler.Register(e.Group("/auth"))
 
-	guards := appmw.NewGuards(tokenSvc, redisAuth, store)
+	rbacSvc := rbac.NewService(store)
+	guards := appmw.NewGuards(tokenSvc, redisAuth, store, rbacSvc)
 	subSvc := subscription.NewService(store)
 	orgSvc := organization.NewService(store, auditSvc, subSvc)
 	orgHandler := organization.NewHandler(orgSvc)
