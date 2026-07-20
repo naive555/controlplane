@@ -297,3 +297,171 @@ func TestRequireOrg_Success(t *testing.T) {
 		t.Errorf("MembershipFromContext(c).Role = %q, want %q", gotMembership.Role, "admin")
 	}
 }
+
+// ---- RequirePermission ----
+
+func validAuthGuardsForPermission(
+	t *testing.T,
+	userID uuid.UUID,
+	membershipFn func(ctx context.Context, arg db.GetMembershipParams) (db.Membership, error),
+	hasPermissionFn func(ctx context.Context, userID, organizationID uuid.UUID, action string) (bool, error),
+) *Guards {
+	t.Helper()
+	return NewGuards(
+		&mockTokenVerifier{
+			verify: func(token string) (uuid.UUID, string, error) {
+				return userID, "user@example.com", nil
+			},
+		},
+		&mockBlacklist{
+			isBlacklisted: func(ctx context.Context, token string) (bool, error) { return false, nil },
+		},
+		&mockMembershipStore{getMembership: membershipFn},
+		&mockPermissionChecker{hasPermission: hasPermissionFn},
+	)
+}
+
+func TestRequirePermission_MissingHeader(t *testing.T) {
+	g := validAuthGuardsForPermission(t, uuid.New(), nil, nil)
+	c, _ := newTestContext(http.MethodGet, "/", map[string]string{
+		"Authorization": "Bearer valid.jwt.token",
+	})
+
+	err := g.RequirePermission("project:create")(okNext)(c)
+	assertHTTPError(t, err, http.StatusBadRequest, "Missing x-organization-id header")
+}
+
+func TestRequirePermission_MalformedOrgID(t *testing.T) {
+	g := validAuthGuardsForPermission(t, uuid.New(), nil, func(ctx context.Context, userID, organizationID uuid.UUID, action string) (bool, error) {
+		t.Fatal("HasPermission should not be called for a malformed org id")
+		return false, nil
+	})
+	c, _ := newTestContext(http.MethodGet, "/", map[string]string{
+		"Authorization": "Bearer valid.jwt.token",
+		OrgHeader:       "not-a-uuid",
+	})
+
+	err := g.RequirePermission("project:create")(okNext)(c)
+	assertHTTPError(t, err, http.StatusForbidden, "Missing permission: project:create")
+}
+
+func TestRequirePermission_Denied(t *testing.T) {
+	orgID := uuid.New()
+	g := validAuthGuardsForPermission(t, uuid.New(), nil, func(ctx context.Context, userID, organizationID uuid.UUID, action string) (bool, error) {
+		return false, nil
+	})
+	c, _ := newTestContext(http.MethodGet, "/", map[string]string{
+		"Authorization": "Bearer valid.jwt.token",
+		OrgHeader:       orgID.String(),
+	})
+
+	err := g.RequirePermission("project:create")(okNext)(c)
+	assertHTTPError(t, err, http.StatusForbidden, "Missing permission: project:create")
+}
+
+func TestRequirePermission_NonMemberGetsMissingPermissionNotNotAMember(t *testing.T) {
+	// The permission check runs BEFORE membership resolution, per plugin.ts
+	// requirePermission — a caller with no membership at all (HasPermission
+	// returns false for them, same as a real non-member) must see "Missing
+	// permission", never "Not a member of this organization".
+	orgID := uuid.New()
+	g := validAuthGuardsForPermission(t, uuid.New(),
+		func(ctx context.Context, arg db.GetMembershipParams) (db.Membership, error) {
+			t.Fatal("GetMembership should not be called before the permission check fails")
+			return db.Membership{}, nil
+		},
+		func(ctx context.Context, userID, organizationID uuid.UUID, action string) (bool, error) {
+			return false, nil
+		},
+	)
+	c, _ := newTestContext(http.MethodGet, "/", map[string]string{
+		"Authorization": "Bearer valid.jwt.token",
+		OrgHeader:       orgID.String(),
+	})
+
+	err := g.RequirePermission("project:create")(okNext)(c)
+	assertHTTPError(t, err, http.StatusForbidden, "Missing permission: project:create")
+}
+
+func TestRequirePermission_CheckerErrorPropagates(t *testing.T) {
+	orgID := uuid.New()
+	checkErr := errors.New("rbac lookup failed")
+	g := validAuthGuardsForPermission(t, uuid.New(), nil, func(ctx context.Context, userID, organizationID uuid.UUID, action string) (bool, error) {
+		return false, checkErr
+	})
+	c, _ := newTestContext(http.MethodGet, "/", map[string]string{
+		"Authorization": "Bearer valid.jwt.token",
+		OrgHeader:       orgID.String(),
+	})
+
+	err := g.RequirePermission("project:create")(okNext)(c)
+	if !errors.Is(err, checkErr) {
+		t.Fatalf("expected the raw error to propagate, got %v", err)
+	}
+}
+
+func TestRequirePermission_AllowedButMembershipMissingPropagatesNotAMember(t *testing.T) {
+	orgID := uuid.New()
+	g := validAuthGuardsForPermission(t, uuid.New(),
+		func(ctx context.Context, arg db.GetMembershipParams) (db.Membership, error) {
+			return db.Membership{}, pgx.ErrNoRows
+		},
+		func(ctx context.Context, userID, organizationID uuid.UUID, action string) (bool, error) {
+			return true, nil
+		},
+	)
+	c, _ := newTestContext(http.MethodGet, "/", map[string]string{
+		"Authorization": "Bearer valid.jwt.token",
+		OrgHeader:       orgID.String(),
+	})
+
+	err := g.RequirePermission("project:create")(okNext)(c)
+	assertHTTPError(t, err, http.StatusForbidden, "Not a member of this organization")
+}
+
+func TestRequirePermission_Success(t *testing.T) {
+	userID := uuid.New()
+	orgID := uuid.New()
+	membership := db.Membership{ID: uuid.New(), UserID: userID, OrganizationID: orgID, Role: "member"}
+
+	g := validAuthGuardsForPermission(t, userID,
+		func(ctx context.Context, arg db.GetMembershipParams) (db.Membership, error) {
+			if arg.UserID != userID || arg.OrganizationID != orgID {
+				t.Fatalf("GetMembership called with %+v, want user=%v org=%v", arg, userID, orgID)
+			}
+			return membership, nil
+		},
+		func(ctx context.Context, gotUserID, gotOrgID uuid.UUID, action string) (bool, error) {
+			if gotUserID != userID || gotOrgID != orgID || action != "project:create" {
+				t.Fatalf("HasPermission called with user=%v org=%v action=%q, want user=%v org=%v action=%q",
+					gotUserID, gotOrgID, action, userID, orgID, "project:create")
+			}
+			return true, nil
+		},
+	)
+	c, rec := newTestContext(http.MethodGet, "/", map[string]string{
+		"Authorization": "Bearer valid.jwt.token",
+		OrgHeader:       orgID.String(),
+	})
+
+	var gotOrgID uuid.UUID
+	var gotMembership db.Membership
+	next := func(c echo.Context) error {
+		gotOrgID = OrgID(c)
+		gotMembership = MembershipFromContext(c)
+		return c.String(http.StatusOK, "ok")
+	}
+
+	if err := g.RequirePermission("project:create")(next)(c); err != nil {
+		t.Fatalf("RequirePermission: unexpected error %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rec.Code)
+	}
+	if gotOrgID != orgID {
+		t.Errorf("OrgID(c) = %v, want %v", gotOrgID, orgID)
+	}
+	if gotMembership.Role != "member" {
+		t.Errorf("MembershipFromContext(c).Role = %q, want %q", gotMembership.Role, "member")
+	}
+}
