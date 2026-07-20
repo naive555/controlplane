@@ -3,6 +3,7 @@ package server_test
 import (
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -190,50 +191,80 @@ func TestIntegration_OrganizationsList(t *testing.T) {
 	ts, _, _ := setupTestServer(t)
 	client := ts.Client()
 
-	org := createOrgWithOwner(t, client, ts.URL, "org-list")
+	t.Run("with memberships", func(t *testing.T) {
+		org := createOrgWithOwner(t, client, ts.URL, "org-list")
 
-	req, err := http.NewRequest(http.MethodGet, ts.URL+"/organizations", nil)
-	if err != nil {
-		t.Fatalf("new request: %v", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+org.Owner.AccessToken)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("do request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
-
-	var memberships []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&memberships); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-
-	var found map[string]any
-	for _, m := range memberships {
-		if m["organizationId"] == org.ID {
-			found = m
-			break
+		req, err := http.NewRequest(http.MethodGet, ts.URL+"/organizations", nil)
+		if err != nil {
+			t.Fatalf("new request: %v", err)
 		}
-	}
-	if found == nil {
-		t.Fatalf("expected a membership for org %s, got %v", org.ID, memberships)
-	}
-	if found["role"] != "owner" {
-		t.Errorf("role = %v, want %q", found["role"], "owner")
-	}
+		req.Header.Set("Authorization", "Bearer "+org.Owner.AccessToken)
 
-	embedded, ok := found["organization"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected embedded organization object, got %v", found["organization"])
-	}
-	if embedded["id"] != org.ID {
-		t.Errorf("embedded organization id = %v, want %q", embedded["id"], org.ID)
-	}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("do request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+
+		var memberships []map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&memberships); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+
+		var found map[string]any
+		for _, m := range memberships {
+			if m["organizationId"] == org.ID {
+				found = m
+				break
+			}
+		}
+		if found == nil {
+			t.Fatalf("expected a membership for org %s, got %v", org.ID, memberships)
+		}
+		if found["role"] != "owner" {
+			t.Errorf("role = %v, want %q", found["role"], "owner")
+		}
+
+		embedded, ok := found["organization"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected embedded organization object, got %v", found["organization"])
+		}
+		if embedded["id"] != org.ID {
+			t.Errorf("embedded organization id = %v, want %q", embedded["id"], org.ID)
+		}
+	})
+
+	t.Run("no memberships serializes as an empty array, not null", func(t *testing.T) {
+		user := registerUser(t, client, ts.URL, "org-list-empty")
+
+		req, err := http.NewRequest(http.MethodGet, ts.URL+"/organizations", nil)
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+user.AccessToken)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("do request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if got := strings.TrimSpace(string(raw)); got != "[]" {
+			t.Fatalf("body = %q, want %q (a JSON array, not null)", got, "[]")
+		}
+	})
 }
 
 func TestIntegration_OrganizationsInvite(t *testing.T) {
