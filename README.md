@@ -2,7 +2,7 @@
 
 A monorepo rewrite of [`controlplane-api`](../controlplane-api) (Bun + ElysiaJS) into **Go (backend) + Next.js (frontend)** — a multi-tenant B2B SaaS platform template (auth, organizations, RBAC, audit logs, subscription limits). See [`docs/`](docs/) for the full analysis, API contract, target architecture, and migration plan, and [`CLAUDE.md`](CLAUDE.md) for ground rules.
 
-**Status**: Phase 2 (auth) complete — `/auth/register`, `/auth/login`, `/auth/refresh`, and `/auth/logout` are live (bcrypt, JWT access/refresh pairs, session rotation with reuse detection, Redis blacklist + login rate limiting). Org/RBAC/audit-query/subscription endpoints and auth guards land in Phases 3–4.
+**Status**: Phase 3 (org + guards) complete — `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` (bcrypt, JWT access/refresh pairs, session rotation with reuse detection, Redis blacklist + login rate limiting), plus `RequireAuth`/`RequireOrg`-guarded `POST /organizations`, `GET /organizations`, `POST /organizations/invite`, and `DELETE /organizations/members/:userId` are all live. RBAC, subscription endpoints, and audit-log queries land in Phase 4.
 
 ## Prerequisites
 
@@ -51,6 +51,34 @@ curl -s localhost:3000/auth/logout \
   -H 'Content-Type: application/json' \
   -H 'Authorization: Bearer <accessToken>' \
   -d '{"refreshToken":"<refreshToken>"}'
+```
+
+### Try the organizations flow
+
+Org-scoped routes need both an `Authorization` header and, past creation, an `x-organization-id` header naming an org the caller belongs to:
+
+```bash
+# create an org (caller becomes its "owner"; returns the org row)
+curl -s localhost:3000/organizations \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <accessToken>' \
+  -d '{"name":"Acme Corp","slug":"acme-corp"}'
+
+# list the caller's orgs (each membership with its organization embedded)
+curl -s localhost:3000/organizations \
+  -H 'Authorization: Bearer <accessToken>'
+
+# invite a member by email (caller must be owner/admin in the target org)
+curl -s localhost:3000/organizations/invite \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <accessToken>' \
+  -H 'x-organization-id: <orgId from above>' \
+  -d '{"email":"teammate@example.com","role":"member"}'
+
+# remove a member (owner cannot be removed)
+curl -s -X DELETE localhost:3000/organizations/members/<userId> \
+  -H 'Authorization: Bearer <accessToken>' \
+  -H 'x-organization-id: <orgId>'
 ```
 
 ## Layout
