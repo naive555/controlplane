@@ -104,3 +104,13 @@ make build       # both artifacts / docker images
 3. Hash refresh tokens at rest (source stores raw JWT)? (Recommend: yes if deviation allowed; keep raw for parity otherwise.)
 4. Testing depth: source has unit tests with mocked infra; Go port should decide unit (mock interfaces) vs. integration (testcontainers / CI service containers, matching source CI).
 5. Whether the access-token blacklist TTL should follow `JWT_ACCESS_EXPIRES_IN` instead of hard-coded 15 min.
+
+## Deviations resolved during Phase 4 (RBAC + subscription + audit query)
+
+Three intentional deviations from `../controlplane-api/src/modules/{rbac,subscription}`, decided with the owner and implemented — see `.claude/plans/archives/2026-07-20-phase-4-rbac-subscription-audit.md` for full rationale:
+
+1. **`RBACService.createRole` transactionality.** Source runs the role insert and `setPermissions` as two separate, non-atomic awaits, so a mid-write crash can leave a role with zero permissions. The Go port wraps both (and `updatePermissions`'s delete+insert) in one `store.WithTx`, per this file's "transactions where the source did multi-step writes" note and `CLAUDE.md`'s "multi-step writes run in transactions" rule.
+2. **Malformed uuids in RBAC/subscription bodies.** Source passes the raw string straight to a Drizzle query, so an invalid uuid throws and surfaces as a 500. The Go port validates `userId`/`roleId`/`planId` body fields with `validate:"required,uuid"`, returning 422 "Validation failed" instead. (A malformed `:roleId` **path** param — no body to validate — still maps to 404 "Role not found", consistent with how the org module treats a malformed `:userId` path param as 404 "Member not found".)
+3. **`POST /subscription/assign` response body.** Source returns an empty 200 body (`void`). The Go port returns `{"success":true}`, matching the response shape of every other write endpoint (`invite`, `removeMember`, `rbac/assign`) for API consistency.
+
+Not treated as deviations (kept bug-for-bug): duplicate actions in a `permissions[]` array still hit the `(role_id, action)` unique constraint and surface as 500, same as source; a well-formed but nonexistent `planId` still fails at the plan foreign key (500) rather than a pre-checked `404`, since the contract has no `PLAN_NOT_FOUND` code.

@@ -2,7 +2,7 @@
 
 A monorepo rewrite of [`controlplane-api`](../controlplane-api) (Bun + ElysiaJS) into **Go (backend) + Next.js (frontend)** — a multi-tenant B2B SaaS platform template (auth, organizations, RBAC, audit logs, subscription limits). See [`docs/`](docs/) for the full analysis, API contract, target architecture, and migration plan, and [`CLAUDE.md`](CLAUDE.md) for ground rules.
 
-**Status**: Phase 3 (org + guards) complete — `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` (bcrypt, JWT access/refresh pairs, session rotation with reuse detection, Redis blacklist + login rate limiting), plus `RequireAuth`/`RequireOrg`-guarded `POST /organizations`, `GET /organizations`, `POST /organizations/invite`, and `DELETE /organizations/members/:userId` are all live. RBAC, subscription endpoints, and audit-log queries land in Phase 4.
+**Status**: Phase 4 (RBAC, subscription, audit query) complete — `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` (bcrypt, JWT access/refresh pairs, session rotation with reuse detection, Redis blacklist + login rate limiting), `POST/GET /organizations`, `POST /organizations/invite`, `DELETE /organizations/members/:userId`, `GET/POST /rbac/roles`, `PUT /rbac/roles/:roleId/permissions`, `POST /rbac/assign`, `GET /subscription`, `POST /subscription/assign`, and `GET /audit-logs` are all live. Swagger docs and the frontend land in later phases.
 
 ## Prerequisites
 
@@ -77,6 +77,55 @@ curl -s localhost:3000/organizations/invite \
 
 # remove a member (owner cannot be removed)
 curl -s -X DELETE localhost:3000/organizations/members/<userId> \
+  -H 'Authorization: Bearer <accessToken>' \
+  -H 'x-organization-id: <orgId>'
+```
+
+### Try RBAC, subscription, and audit logs
+
+All three route groups need `Authorization` + `x-organization-id`, same as the org-scoped routes above:
+
+```bash
+# create a role (returns the raw role row — no embedded permissions)
+curl -s localhost:3000/rbac/roles \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <accessToken>' \
+  -H 'x-organization-id: <orgId>' \
+  -d '{"name":"editor","permissions":["project:create","project:*"]}'
+
+# list roles (each with its permissions embedded)
+curl -s localhost:3000/rbac/roles \
+  -H 'Authorization: Bearer <accessToken>' \
+  -H 'x-organization-id: <orgId>'
+
+# replace a role's permission set
+curl -s -X PUT localhost:3000/rbac/roles/<roleId>/permissions \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <accessToken>' \
+  -H 'x-organization-id: <orgId>' \
+  -d '{"permissions":["doc:read"]}'
+
+# assign a role to a member
+curl -s localhost:3000/rbac/assign \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <accessToken>' \
+  -H 'x-organization-id: <orgId>' \
+  -d '{"userId":"<memberUserId>","roleId":"<roleId>"}'
+
+# get the org's subscription (null if none assigned yet)
+curl -s localhost:3000/subscription \
+  -H 'Authorization: Bearer <accessToken>' \
+  -H 'x-organization-id: <orgId>'
+
+# assign/upsert a plan (planId from the seeded free/pro/enterprise plans)
+curl -s localhost:3000/subscription/assign \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <accessToken>' \
+  -H 'x-organization-id: <orgId>' \
+  -d '{"planId":"<planId>"}'
+
+# query audit logs (all filters optional: userId, action, limit 1-100 default 50)
+curl -s 'localhost:3000/audit-logs?action=org.created&limit=10' \
   -H 'Authorization: Bearer <accessToken>' \
   -H 'x-organization-id: <orgId>'
 ```
