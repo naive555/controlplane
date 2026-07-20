@@ -15,10 +15,20 @@ import (
 
 type mockSubStore struct {
 	getOrgSubscriptionWithPlan func(ctx context.Context, organizationID uuid.UUID) (db.GetOrgSubscriptionWithPlanRow, error)
+	getOrgSubscription         func(ctx context.Context, organizationID uuid.UUID) (db.GetOrgSubscriptionRow, error)
+	upsertOrgSubscription      func(ctx context.Context, arg db.UpsertOrgSubscriptionParams) error
 }
 
 func (m *mockSubStore) GetOrgSubscriptionWithPlan(ctx context.Context, organizationID uuid.UUID) (db.GetOrgSubscriptionWithPlanRow, error) {
 	return m.getOrgSubscriptionWithPlan(ctx, organizationID)
+}
+
+func (m *mockSubStore) GetOrgSubscription(ctx context.Context, organizationID uuid.UUID) (db.GetOrgSubscriptionRow, error) {
+	return m.getOrgSubscription(ctx, organizationID)
+}
+
+func (m *mockSubStore) UpsertOrgSubscription(ctx context.Context, arg db.UpsertOrgSubscriptionParams) error {
+	return m.upsertOrgSubscription(ctx, arg)
 }
 
 func mustMarshal(t *testing.T, v any) json.RawMessage {
@@ -149,5 +159,75 @@ func TestEnforceLimit_DatabaseErrorPropagates(t *testing.T) {
 	err := svc.EnforceLimit(context.Background(), uuid.New(), "max_members", 0)
 	if !errors.Is(err, dbErr) {
 		t.Fatalf("expected the raw db error to propagate, got %v", err)
+	}
+}
+
+func TestGetSubscription_NoSubscriptionReturnsNil(t *testing.T) {
+	svc := NewService(&mockSubStore{
+		getOrgSubscription: func(ctx context.Context, organizationID uuid.UUID) (db.GetOrgSubscriptionRow, error) {
+			return db.GetOrgSubscriptionRow{}, pgx.ErrNoRows
+		},
+	})
+
+	sub, err := svc.GetSubscription(context.Background(), uuid.New())
+	if err != nil {
+		t.Fatalf("expected no error for an org with no subscription, got %v", err)
+	}
+	if sub != nil {
+		t.Errorf("expected a nil subscription, got %+v", sub)
+	}
+}
+
+func TestGetSubscription_ReturnsRow(t *testing.T) {
+	orgID := uuid.New()
+	row := db.GetOrgSubscriptionRow{OrganizationID: orgID, PlanName: "pro"}
+	svc := NewService(&mockSubStore{
+		getOrgSubscription: func(ctx context.Context, organizationID uuid.UUID) (db.GetOrgSubscriptionRow, error) {
+			if organizationID != orgID {
+				t.Fatalf("GetOrgSubscription called with %v, want %v", organizationID, orgID)
+			}
+			return row, nil
+		},
+	})
+
+	sub, err := svc.GetSubscription(context.Background(), orgID)
+	if err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if sub == nil || sub.PlanName != "pro" {
+		t.Errorf("GetSubscription() = %+v, want %+v", sub, row)
+	}
+}
+
+func TestGetSubscription_DatabaseErrorPropagates(t *testing.T) {
+	dbErr := errors.New("connection reset")
+	svc := NewService(&mockSubStore{
+		getOrgSubscription: func(ctx context.Context, organizationID uuid.UUID) (db.GetOrgSubscriptionRow, error) {
+			return db.GetOrgSubscriptionRow{}, dbErr
+		},
+	})
+
+	_, err := svc.GetSubscription(context.Background(), uuid.New())
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected the raw db error to propagate, got %v", err)
+	}
+}
+
+func TestAssignPlan_ForwardsToUpsert(t *testing.T) {
+	orgID := uuid.New()
+	planID := uuid.New()
+	var gotArg db.UpsertOrgSubscriptionParams
+	svc := NewService(&mockSubStore{
+		upsertOrgSubscription: func(ctx context.Context, arg db.UpsertOrgSubscriptionParams) error {
+			gotArg = arg
+			return nil
+		},
+	})
+
+	if err := svc.AssignPlan(context.Background(), orgID, planID); err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if gotArg.OrganizationID != orgID || gotArg.PlanID != planID {
+		t.Errorf("UpsertOrgSubscription called with %+v, want org=%v plan=%v", gotArg, orgID, planID)
 	}
 }
