@@ -30,6 +30,17 @@ func (h *Handler) Register(g *echo.Group, guards *appmw.Guards) {
 	g.POST("/assign", h.assign, guards.RequireOrg())
 }
 
+// get returns the active organization's subscription with its plan embedded,
+// or null if the organization has no subscription.
+// @Summary  Get the organization's subscription
+// @Tags     subscription
+// @Security BearerAuth
+// @Produce  json
+// @Param    x-organization-id  header    string  true  "Active organization ID"
+// @Success  200                {object}  SubscriptionResponse
+// @Failure  400                {object}  httpx.ErrorResponse  "Missing x-organization-id header"
+// @Failure  403                {object}  httpx.ErrorResponse  "Not a member of this organization"
+// @Router   /subscription [get]
 func (h *Handler) get(c echo.Context) error {
 	sub, err := h.service.GetSubscription(c.Request().Context(), appmw.OrgID(c))
 	if err != nil {
@@ -42,6 +53,19 @@ func (h *Handler) get(c echo.Context) error {
 	return c.JSON(http.StatusOK, toSubscriptionResponse(*sub))
 }
 
+// assign upserts the active organization's subscription to the given plan.
+// @Summary  Assign a subscription plan
+// @Tags     subscription
+// @Security BearerAuth
+// @Accept   json
+// @Produce  json
+// @Param    x-organization-id  header    string         true  "Active organization ID"
+// @Param    body               body      AssignRequest  true  "Plan payload"
+// @Success  200                {object}  SuccessResponse
+// @Failure  400                {object}  httpx.ErrorResponse  "Missing x-organization-id header"
+// @Failure  403                {object}  httpx.ErrorResponse  "Not a member of this organization"
+// @Failure  422                {object}  httpx.ErrorResponse  "Validation failed"
+// @Router   /subscription/assign [post]
 func (h *Handler) assign(c echo.Context) error {
 	var req AssignRequest
 	if err := httpx.BindAndValidate(c, &req); err != nil {

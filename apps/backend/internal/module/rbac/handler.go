@@ -32,6 +32,17 @@ func (h *Handler) Register(g *echo.Group, guards *appmw.Guards) {
 	g.POST("/assign", h.assignRole, guards.RequireOrg())
 }
 
+// listRoles returns the active organization's custom roles with permissions
+// embedded.
+// @Summary  List roles
+// @Tags     rbac
+// @Security BearerAuth
+// @Produce  json
+// @Param    x-organization-id  header  string  true  "Active organization ID"
+// @Success  200                {array}  RoleResponse
+// @Failure  400                {object}  httpx.ErrorResponse  "Missing x-organization-id header"
+// @Failure  403                {object}  httpx.ErrorResponse  "Not a member of this organization"
+// @Router   /rbac/roles [get]
 func (h *Handler) listRoles(c echo.Context) error {
 	roles, err := h.service.ListRoles(c.Request().Context(), appmw.OrgID(c))
 	if err != nil {
@@ -46,6 +57,20 @@ func (h *Handler) listRoles(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
+// createRole creates a role and sets its initial permission set in one
+// transaction.
+// @Summary  Create a role
+// @Tags     rbac
+// @Security BearerAuth
+// @Accept   json
+// @Produce  json
+// @Param    x-organization-id  header    string             true  "Active organization ID"
+// @Param    body               body      CreateRoleRequest  true  "Role payload"
+// @Success  200                {object}  RoleRowResponse
+// @Failure  400                {object}  httpx.ErrorResponse  "Missing x-organization-id header"
+// @Failure  403                {object}  httpx.ErrorResponse  "Not a member of this organization"
+// @Failure  422                {object}  httpx.ErrorResponse  "Validation failed"
+// @Router   /rbac/roles [post]
 func (h *Handler) createRole(c echo.Context) error {
 	var req CreateRoleRequest
 	if err := httpx.BindAndValidate(c, &req); err != nil {
@@ -60,6 +85,21 @@ func (h *Handler) createRole(c echo.Context) error {
 	return c.JSON(http.StatusOK, toRoleRowResponse(role))
 }
 
+// updatePermissions replaces a role's permission set.
+// @Summary  Replace a role's permissions
+// @Tags     rbac
+// @Security BearerAuth
+// @Accept   json
+// @Produce  json
+// @Param    x-organization-id  header    string                     true  "Active organization ID"
+// @Param    roleId             path      string                     true  "Role ID"
+// @Param    body               body      UpdatePermissionsRequest  true  "New permission set"
+// @Success  200                {object}  SuccessResponse
+// @Failure  400                {object}  httpx.ErrorResponse  "Missing x-organization-id header"
+// @Failure  403                {object}  httpx.ErrorResponse  "Not a member of this organization"
+// @Failure  404                {object}  httpx.ErrorResponse  "ROLE_NOT_FOUND"
+// @Failure  422                {object}  httpx.ErrorResponse  "Validation failed"
+// @Router   /rbac/roles/{roleId}/permissions [put]
 func (h *Handler) updatePermissions(c echo.Context) error {
 	roleID, err := uuid.Parse(c.Param("roleId"))
 	if err != nil {
@@ -79,6 +119,20 @@ func (h *Handler) updatePermissions(c echo.Context) error {
 	return c.JSON(http.StatusOK, SuccessResponse{Success: true})
 }
 
+// assignRole assigns a custom role to a member's membership.
+// @Summary  Assign a role to a member
+// @Tags     rbac
+// @Security BearerAuth
+// @Accept   json
+// @Produce  json
+// @Param    x-organization-id  header    string             true  "Active organization ID"
+// @Param    body               body      AssignRoleRequest  true  "Assignment payload"
+// @Success  200                {object}  SuccessResponse
+// @Failure  400                {object}  httpx.ErrorResponse  "Missing x-organization-id header"
+// @Failure  403                {object}  httpx.ErrorResponse  "Not a member of this organization"
+// @Failure  404                {object}  httpx.ErrorResponse  "MEMBER_NOT_FOUND / ROLE_NOT_FOUND"
+// @Failure  422                {object}  httpx.ErrorResponse  "Validation failed"
+// @Router   /rbac/assign [post]
 func (h *Handler) assignRole(c echo.Context) error {
 	var req AssignRoleRequest
 	if err := httpx.BindAndValidate(c, &req); err != nil {

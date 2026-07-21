@@ -1,4 +1,4 @@
-.PHONY: up down dev api web build test lint tidy fmt migrate migrate-down migrate-status sqlc seed
+.PHONY: up down dev api web build test lint tidy fmt migrate migrate-down migrate-status sqlc seed swagger
 
 ## Start Postgres + Redis in the background
 up:
@@ -65,3 +65,7 @@ fmt:
 ## Regenerate sqlc query code (requires sqlc installed: go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest)
 sqlc:
 	cd apps/backend && sqlc generate
+
+## Regenerate Swagger/OpenAPI docs (requires swag installed: go install github.com/swaggo/swag/cmd/swag@latest)
+swagger:
+	cd apps/backend && swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal --useStructName

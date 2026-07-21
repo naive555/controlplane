@@ -63,6 +63,16 @@ func (h *Handler) Register(g *echo.Group) {
 	g.POST("/logout", h.logout)
 }
 
+// register creates a new user and returns a fresh access/refresh token pair.
+// @Summary  Register a new user
+// @Tags     auth
+// @Accept   json
+// @Produce  json
+// @Param    body  body      RegisterRequest  true  "Registration payload"
+// @Success  200   {object}  TokenResponse
+// @Failure  409   {object}  httpx.ErrorResponse  "EMAIL_TAKEN"
+// @Failure  422   {object}  httpx.ErrorResponse  "Validation failed"
+// @Router   /auth/register [post]
 func (h *Handler) register(c echo.Context) error {
 	var req RegisterRequest
 	if err := httpx.BindAndValidate(c, &req); err != nil {
@@ -82,6 +92,17 @@ func (h *Handler) register(c echo.Context) error {
 	return h.issueTokenPair(c, user.ID, user.Email)
 }
 
+// login authenticates a user and returns a fresh access/refresh token pair.
+// @Summary  Log in
+// @Tags     auth
+// @Accept   json
+// @Produce  json
+// @Param    body  body      LoginRequest  true  "Login credentials"
+// @Success  200   {object}  TokenResponse
+// @Failure  401   {object}  httpx.ErrorResponse  "INVALID_CREDENTIALS"
+// @Failure  429   {object}  httpx.ErrorResponse  "TOO_MANY_ATTEMPTS"
+// @Failure  422   {object}  httpx.ErrorResponse  "Validation failed"
+// @Router   /auth/login [post]
 func (h *Handler) login(c echo.Context) error {
 	var req LoginRequest
 	if err := httpx.BindAndValidate(c, &req); err != nil {
@@ -96,6 +117,17 @@ func (h *Handler) login(c echo.Context) error {
 	return h.issueTokenPair(c, user.ID, user.Email)
 }
 
+// refresh rotates a refresh token and returns a new access/refresh pair.
+// Reuse of a revoked/expired token revokes its entire session family.
+// @Summary  Rotate a refresh token
+// @Tags     auth
+// @Accept   json
+// @Produce  json
+// @Param    body  body      RefreshRequest  true  "Refresh token"
+// @Success  200   {object}  TokenResponse
+// @Failure  401   {object}  httpx.ErrorResponse  "INVALID_REFRESH_TOKEN / REFRESH_TOKEN_REUSE / REFRESH_TOKEN_EXPIRED"
+// @Failure  422   {object}  httpx.ErrorResponse  "Validation failed"
+// @Router   /auth/refresh [post]
 func (h *Handler) refresh(c echo.Context) error {
 	var req RefreshRequest
 	if err := httpx.BindAndValidate(c, &req); err != nil {
@@ -128,6 +160,18 @@ func (h *Handler) refresh(c echo.Context) error {
 	return c.JSON(http.StatusOK, TokenResponse{AccessToken: accessToken, RefreshToken: newRefreshToken})
 }
 
+// logout blacklists the caller's access token (if present) for 15 minutes
+// and revokes all sessions for the refresh token's owner. Always succeeds,
+// even for an unknown refresh token.
+// @Summary  Log out
+// @Tags     auth
+// @Accept   json
+// @Produce  json
+// @Param    Authorization  header    string          false  "Bearer <accessToken>"
+// @Param    body           body      RefreshRequest  true   "Refresh token"
+// @Success  200            {object}  LogoutResponse
+// @Failure  422            {object}  httpx.ErrorResponse  "Validation failed"
+// @Router   /auth/logout [post]
 func (h *Handler) logout(c echo.Context) error {
 	var req RefreshRequest
 	if err := httpx.BindAndValidate(c, &req); err != nil {

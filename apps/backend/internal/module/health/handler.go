@@ -23,6 +23,12 @@ func (h *Handler) Register(e *echo.Echo) {
 	e.GET("/health", h.check)
 }
 
+// check reports liveness.
+// @Summary  Health check
+// @Tags     health
+// @Produce  json
+// @Success  200  {object}  map[string]any  "{ status: \"ok\", uptime: <seconds> }"
+// @Router   /health [get]
 func (h *Handler) check(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"status": "ok",

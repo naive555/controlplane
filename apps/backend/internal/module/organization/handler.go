@@ -33,6 +33,17 @@ func (h *Handler) Register(g *echo.Group, guards *appmw.Guards) {
 	g.DELETE("/members/:userId", h.removeMember, guards.RequireOrg())
 }
 
+// create creates a new organization and an owner membership for the caller.
+// @Summary  Create an organization
+// @Tags     organizations
+// @Security BearerAuth
+// @Accept   json
+// @Produce  json
+// @Param    body  body      CreateRequest  true  "Organization payload"
+// @Success  200   {object}  OrgResponse
+// @Failure  409   {object}  httpx.ErrorResponse  "SLUG_TAKEN"
+// @Failure  422   {object}  httpx.ErrorResponse  "Validation failed"
+// @Router   /organizations [post]
 func (h *Handler) create(c echo.Context) error {
 	var req CreateRequest
 	if err := httpx.BindAndValidate(c, &req); err != nil {
@@ -47,6 +58,13 @@ func (h *Handler) create(c echo.Context) error {
 	return c.JSON(http.StatusOK, toOrgResponse(org))
 }
 
+// list returns the caller's memberships with each organization embedded.
+// @Summary  List my organizations
+// @Tags     organizations
+// @Security BearerAuth
+// @Produce  json
+// @Success  200  {array}  MembershipResponse
+// @Router   /organizations [get]
 func (h *Handler) list(c echo.Context) error {
 	rows, err := h.service.ListByUser(c.Request().Context(), appmw.UserID(c))
 	if err != nil {
@@ -61,6 +79,22 @@ func (h *Handler) list(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
+// invite adds a new member to the active organization, enforcing the caller's
+// role (not "member") and the plan's max_members limit.
+// @Summary  Invite a member
+// @Tags     organizations
+// @Security BearerAuth
+// @Accept   json
+// @Produce  json
+// @Param    x-organization-id  header    string         true  "Active organization ID"
+// @Param    body               body      InviteRequest  true  "Invite payload"
+// @Success  200                {object}  SuccessResponse
+// @Failure  400                {object}  httpx.ErrorResponse  "Missing x-organization-id header"
+// @Failure  403                {object}  httpx.ErrorResponse  "FORBIDDEN / LIMIT_EXCEEDED / Not a member of this organization"
+// @Failure  404                {object}  httpx.ErrorResponse  "USER_NOT_FOUND"
+// @Failure  409                {object}  httpx.ErrorResponse  "ALREADY_MEMBER"
+// @Failure  422                {object}  httpx.ErrorResponse  "Validation failed"
+// @Router   /organizations/invite [post]
 func (h *Handler) invite(c echo.Context) error {
 	var req InviteRequest
 	if err := httpx.BindAndValidate(c, &req); err != nil {
@@ -76,6 +110,19 @@ func (h *Handler) invite(c echo.Context) error {
 	return c.JSON(http.StatusOK, SuccessResponse{Success: true})
 }
 
+// removeMember removes a member from the active organization. The caller's
+// role must not be "member"; the owner cannot be removed.
+// @Summary  Remove a member
+// @Tags     organizations
+// @Security BearerAuth
+// @Produce  json
+// @Param    x-organization-id  header    string  true  "Active organization ID"
+// @Param    userId             path      string  true  "Member user ID"
+// @Success  200                {object}  SuccessResponse
+// @Failure  400                {object}  httpx.ErrorResponse  "Missing x-organization-id header"
+// @Failure  403                {object}  httpx.ErrorResponse  "CANNOT_REMOVE_OWNER / FORBIDDEN / Not a member of this organization"
+// @Failure  404                {object}  httpx.ErrorResponse  "MEMBER_NOT_FOUND"
+// @Router   /organizations/members/{userId} [delete]
 func (h *Handler) removeMember(c echo.Context) error {
 	targetID, err := uuid.Parse(c.Param("userId"))
 	if err != nil {

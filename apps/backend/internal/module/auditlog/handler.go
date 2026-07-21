@@ -30,6 +30,21 @@ func (h *Handler) Register(g *echo.Group, guards *appmw.Guards) {
 	g.GET("", h.query, guards.RequireOrg())
 }
 
+// query returns the active organization's audit logs, newest first,
+// optionally filtered by userId/action and capped by limit (1-100, default 50).
+// @Summary  Query audit logs
+// @Tags     audit-logs
+// @Security BearerAuth
+// @Produce  json
+// @Param    x-organization-id  header    string  true   "Active organization ID"
+// @Param    userId             query     string  false  "Filter by user ID"
+// @Param    action             query     string  false  "Filter by action"
+// @Param    limit              query     int     false  "Max results (1-100, default 50)"
+// @Success  200                {array}   LogResponse
+// @Failure  400                {object}  httpx.ErrorResponse  "Missing x-organization-id header"
+// @Failure  403                {object}  httpx.ErrorResponse  "Not a member of this organization"
+// @Failure  422                {object}  httpx.ErrorResponse  "Validation failed"
+// @Router   /audit-logs [get]
 func (h *Handler) query(c echo.Context) error {
 	var q QueryParams
 	if err := httpx.BindAndValidate(c, &q); err != nil {

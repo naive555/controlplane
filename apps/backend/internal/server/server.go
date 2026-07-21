@@ -12,7 +12,9 @@ import (
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
 	"github.com/redis/go-redis/v9"
+	echoSwagger "github.com/swaggo/echo-swagger"
 
+	_ "github.com/controlplane/backend/docs" // generated OpenAPI spec
 	"github.com/controlplane/backend/internal/config"
 	"github.com/controlplane/backend/internal/infra/database"
 	appredis "github.com/controlplane/backend/internal/infra/redis"
@@ -24,6 +26,7 @@ import (
 	"github.com/controlplane/backend/internal/module/rbac"
 	"github.com/controlplane/backend/internal/module/subscription"
 	"github.com/controlplane/backend/internal/shared/apperror"
+	"github.com/controlplane/backend/internal/shared/httpx"
 )
 
 // New builds a fully configured Echo instance: middleware stack, custom
@@ -41,6 +44,11 @@ func New(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool, rdb *redis.Cl
 	e.Use(requestLogger(log))
 
 	health.NewHandler().Register(e)
+
+	e.GET("/swagger", func(c echo.Context) error {
+		return c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
+	})
+	e.GET("/swagger/*", echoSwagger.WrapHandler)
 
 	store := database.NewStore(pool)
 	redisAuth := appredis.NewAuth(rdb)
@@ -63,12 +71,6 @@ func New(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool, rdb *redis.Cl
 	auditlog.NewHandler(auditSvc).Register(e.Group("/audit-logs"), guards)
 
 	return e
-}
-
-// errorBody is the JSON shape returned for every error response,
-// mirroring the { message: string } shape used by the source app.
-type errorBody struct {
-	Message string `json:"message"`
 }
 
 // newErrorHandler returns Echo's global error handler. It maps:
@@ -109,7 +111,7 @@ func newErrorHandler(log *slog.Logger) echo.HTTPErrorHandler {
 			log.Error("request failed", "error", err, "status", status, "path", c.Request().URL.Path)
 		}
 
-		if writeErr := c.JSON(status, errorBody{Message: message}); writeErr != nil {
+		if writeErr := c.JSON(status, httpx.ErrorResponse{Message: message}); writeErr != nil {
 			log.Error("failed to write error response", "error", writeErr)
 		}
 	}

@@ -2,6 +2,15 @@
 // Redis and Postgres, start the HTTP server, and shut down gracefully on
 // SIGINT/SIGTERM — mirroring the bootstrap sequence in the source app's
 // src/index.ts.
+//
+// @title                      Controlplane API
+// @version                    0.1.0
+// @description                Multi-tenant B2B SaaS control-plane API (Go port of controlplane-api).
+// @BasePath                   /
+// @securityDefinitions.apikey BearerAuth
+// @in                         header
+// @name                       Authorization
+// @description                Type "Bearer {token}" — the JWT access token.
 package main
 
 import (
