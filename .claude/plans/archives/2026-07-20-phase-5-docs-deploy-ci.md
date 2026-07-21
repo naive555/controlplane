@@ -260,44 +260,90 @@ deferred (Docker wasn't available at the time).
 
 ---
 
-## Step 3 — golangci-lint — pending
+## Step 3 — golangci-lint — ✅ DONE (2026-07-21, not yet committed)
 
-### 3a. `apps/backend/.golangci.yml`
+### Deviation from the original draft — golangci-lint v2 config format
+
+`go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`
+resolves to **v2.12.2** now (the tool moved to a `/v2` module path and a
+new config schema — `version: "2"` at the top, `gofmt`/`goimports` live
+under a separate `formatters:` block instead of `linters.enable`, and
+`issues.exclude-rules` moved to `linters.exclusions.rules`). The v1-style
+config in the original draft doesn't validate under v2. Actual config
+shipped:
 
 ```yaml
+version: "2"
+
 run:
   timeout: 5m
+
 linters:
   enable:
-    - govet
     - errcheck
+    - govet
     - staticcheck
     - ineffassign
     - unused
+    - misspell
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+
+formatters:
+  enable:
     - gofmt
     - goimports
-    - misspell
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters: [errcheck]
 ```
 
-### 3b. Update Makefile `lint`
+Validated with `golangci-lint config verify` (no output = valid).
+
+### 3b. Update Makefile `lint` — done, unchanged from draft
 
 ```make
-## Lint backend (golangci-lint if installed, else go vet)
+## Lint the backend (golangci-lint if installed, else go vet)
 lint:
 	cd apps/backend && (command -v golangci-lint >/dev/null 2>&1 && golangci-lint run || go vet ./...)
 ```
 
-### 3c. Run once locally and fix findings
+### 3c. Run once locally and fix findings — done, one real fix applied
 
-```bash
-cd apps/backend && golangci-lint run
-```
+`golangci-lint run` surfaced 4 issues on the first pass:
 
-Fix anything the new linters surface. Keep fixes mechanical; no behavior change.
+1. **`errcheck` in `cmd/migrate/main.go:48`** — `defer db.Close()` return
+   value unchecked. **Fixed**: `defer func() { _ = db.Close() }()`,
+   matching the existing house style for intentionally-ignored `Close()`
+   errors in short-lived/cleanup paths (`internal/infra/redis/redis.go:25`
+   uses the same `_ = client.Close()` pattern).
+2. **3× `gofmt` findings, different files each run** — e.g. run 1 flagged
+   `database.go`/`auth.go`(redis)/`bind.go`; run 2 flagged
+   `database.go`/`organization/dto.go`/`organization/service.go`; run 3
+   flagged `rbac/dto.go`/`rbac/service.go`/`rbac/service_test.go`.
+   **Root cause, confirmed and not a real formatting problem**: this repo
+   checkout has `core.autocrlf=true` (Windows), so most untouched `.go`
+   files have CRLF line endings on disk while git stores LF. Verified by
+   normalizing each flagged file's line endings (`sed 's/\r$//'`) and
+   re-running `gofmt -d` — **zero diff** every time, meaning the actual
+   (committed) content is already gofmt-clean; only the CRLF artifact
+   differs. The specific 3-file subset golangci-lint's `gofmt` formatter
+   picks changes nondeterministically run-to-run (raw `gofmt -l .` flags
+   ~34 CRLF files consistently; golangci-lint's own check appears to sample/
+   cap differently — not fully understood, but irrelevant given the root
+   cause). **Not fixed** — touching line endings on ~34 unrelated files is
+   out of scope for this step and would produce a huge unrelated diff.
+   **Why this is safe to leave**: `.github/workflows/ci.yml`'s backend job
+   runs on `ubuntu-latest`, which checks out LF-native (no `autocrlf`
+   rewriting), so this flakiness is Windows-local-only and won't reproduce
+   in CI.
+
+Re-ran after the `errcheck` fix: `go build ./...`, `go vet ./...`,
+`go test ./...` all clean — no behavior change.
+
+**Not committed yet** — per instruction, this step's changes
+(`.golangci.yml`, `cmd/migrate/main.go`, `Makefile`) are sitting in the
+working tree.
 
 ---
 

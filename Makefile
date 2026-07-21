@@ -50,9 +50,9 @@ build:
 test:
 	cd apps/backend && go test ./...
 
-## Vet the backend (golangci-lint added in a later phase)
+## Lint the backend (golangci-lint if installed, else go vet)
 lint:
-	cd apps/backend && go vet ./...
+	cd apps/backend && (command -v golangci-lint >/dev/null 2>&1 && golangci-lint run || go vet ./...)
 
 ## Tidy go.mod/go.sum
 tidy:
