@@ -2,7 +2,7 @@
 
 A monorepo rewrite of [`controlplane-api`](../controlplane-api) (Bun + ElysiaJS) into **Go (backend) + Next.js (frontend)** — a multi-tenant B2B SaaS platform template (auth, organizations, RBAC, audit logs, subscription limits). See [`docs/`](docs/) for the full analysis, API contract, target architecture, and migration plan, and [`CLAUDE.md`](CLAUDE.md) for ground rules.
 
-**Status**: Phase 4 (RBAC, subscription, audit query) complete — `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` (bcrypt, JWT access/refresh pairs, session rotation with reuse detection, Redis blacklist + login rate limiting), `POST/GET /organizations`, `POST /organizations/invite`, `DELETE /organizations/members/:userId`, `GET/POST /rbac/roles`, `PUT /rbac/roles/:roleId/permissions`, `POST /rbac/assign`, `GET /subscription`, `POST /subscription/assign`, and `GET /audit-logs` are all live. Swagger docs and the frontend land in later phases.
+**Status**: Phase 5 (docs, deploy, CI parity) complete — `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` (bcrypt, JWT access/refresh pairs, session rotation with reuse detection, Redis blacklist + login rate limiting), `POST/GET /organizations`, `POST /organizations/invite`, `DELETE /organizations/members/:userId`, `GET/POST /rbac/roles`, `PUT /rbac/roles/:roleId/permissions`, `POST /rbac/assign`, `GET /subscription`, `POST /subscription/assign`, and `GET /audit-logs` are all live and documented at [`/swagger`](#swagger--api-docs). The backend ships as a distroless Docker image with k8s manifests and CI lint/build/release workflows. The frontend lands in Phase 6.
 
 ## Prerequisites
 
@@ -25,6 +25,17 @@ curl localhost:3000/health
 ```
 
 Regenerating sqlc query code (only needed after editing `apps/backend/internal/infra/database/queries/*.sql`) requires the `sqlc` CLI: `go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest`, then `make sqlc`.
+
+## Swagger / API docs
+
+With `make api` running, open [`localhost:3000/swagger`](http://localhost:3000/swagger) for interactive Swagger UI covering every route (request/response schemas, status codes, and the `BearerAuth` security scheme). The raw spec is at `localhost:3000/swagger/doc.json`.
+
+The spec is generated from Go doc-comments via [swaggo](https://github.com/swaggo/swag) and committed to `apps/backend/docs/`. After changing a handler's annotations, regenerate with:
+
+```bash
+go install github.com/swaggo/swag/cmd/swag@latest   # once
+make swagger
+```
 
 ### Try the auth flow
 
@@ -130,13 +141,36 @@ curl -s 'localhost:3000/audit-logs?action=org.created&limit=10' \
   -H 'x-organization-id: <orgId>'
 ```
 
+## Docker
+
+`apps/backend/Dockerfile` is a multi-stage build: a `golang:1.26-alpine` builder compiles the API and a small `healthcheck` binary, and the runner is [`gcr.io/distroless/static-debian12:nonroot`](https://github.com/GoogleContainerTools/distroless) — no shell, so `HEALTHCHECK` runs the dedicated `healthcheck` binary instead of `curl`.
+
+```bash
+docker build -t controlplane-api:dev ./apps/backend
+docker compose up -d --build api   # against the db/redis services in compose.yaml
+```
+
+## Kubernetes
+
+Manifests live in [`k8s/`](k8s/), ported from the source app with env-var parity fixes (`APP_ENV`/`APP_NAME` instead of `NODE_ENV`). See [`k8s/README.md`](k8s/README.md) for the full layout and apply instructions:
+
+```bash
+cp k8s/secret.example.yaml k8s/secret.yaml
+cp k8s/postgres/secret.example.yaml k8s/postgres/secret.yaml
+# edit both secret.yaml files with real values, then:
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/ -R
+```
+
+The frontend's `web` Deployment lands in Phase 6.
+
 ## Layout
 
 ```
 apps/backend/    Go API (Echo)
 apps/frontend/   Next.js dashboard
 docs/            Migration analysis, API contract, architecture, plan
-k8s/             Kubernetes manifests (ported in a later phase)
+k8s/             Kubernetes manifests (api/postgres/redis; web/ lands in Phase 6)
 ```
 
 ## Common commands
@@ -149,11 +183,12 @@ make migrate-down    # roll back the most recent migration
 make migrate-status  # show migration status
 make seed            # seed default plans (free/pro/enterprise) — idempotent
 make sqlc            # regenerate sqlc query code (requires sqlc installed)
+make swagger         # regenerate Swagger/OpenAPI docs (requires swag installed)
 make api             # run the Go API (go run)
 make web             # run the Next.js dev server (pnpm dev)
 make build           # build backend binary + frontend production build
 make test            # go test ./...
-make lint            # go vet ./...
+make lint            # golangci-lint if installed, else go vet ./...
 make tidy            # go mod tidy
 make fmt             # go fmt ./...
 ```

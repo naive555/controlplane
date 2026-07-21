@@ -510,12 +510,32 @@ instruction to commit was given for this step).
 
 ---
 
-## Step 6 — Docs updates — pending
+## Step 6 — Docs updates — ✅ DONE (2026-07-21, not yet committed)
 
-- README: `/swagger`, Docker, Kubernetes sections; update phase status.
-- CLAUDE.md status paragraph: note Swagger/distroless/k8s/CI-lint live.
-- Record the Step-1 `httpx.ErrorResponse` swaggo deviation above as the
-  canonical rationale if it needs citing elsewhere.
+- **README.md**: status line updated to "Phase 5 ... complete", with
+  `/swagger` linked inline. Added three new sections: "Swagger / API docs"
+  (UI URL, raw spec URL, `make swagger` regen instructions), "Docker"
+  (distroless build, `docker compose up -d --build api`), "Kubernetes"
+  (links to `k8s/README.md`, apply instructions). Updated the stale
+  `Layout` k8s/ line ("ported in a later phase" → "api/postgres/redis; web/
+  lands in Phase 6") and the `Common commands` table (`make lint`
+  description was still "go vet ./..." from before Step 3; added the
+  missing `make swagger` row).
+- **CLAUDE.md**: status paragraph updated to "Phase 5 ... complete" with a
+  new sentence covering everything Phase 5 added (swagger, distroless
+  image + healthcheck binary, golangci-lint v2, k8s manifests with env
+  parity, CI `lint`/`docker` jobs, `release.yml`). Also fixed the adjacent
+  `Commands` block's `make lint` line (was claiming "golangci-lint +
+  eslint" — frontend eslint isn't wired into the root Makefile) and added
+  the missing `make swagger` entry, since it was directly adjacent to the
+  status edit and factually wrong.
+- **Decided not to duplicate** the Step-1 `httpx.ErrorResponse` swaggo
+  rationale into `docs/03-target-architecture.md`'s "Deviations resolved"
+  section: that section is specifically about API-contract behavioral
+  deviations from `../controlplane-api` (Phase 4's entries are all
+  response-shape/status-code changes), not internal Go package layout
+  choices. The swaggo/httpx move has no API-contract impact, so it stays
+  documented once, here in Step 1.
 
 ---
 
@@ -564,7 +584,7 @@ curl -s localhost:3000/swagger/doc.json | head
    GitHub Actions execution still outstanding (needs a push/PR; see Step 5
    follow-up).
 6. ✅ `go test ./...` unchanged — no behavior regressions.
-7. ⬜ README + CLAUDE.md status updated.
+7. ✅ README + CLAUDE.md status updated.
 
 ## Suggested commit sequence
 
