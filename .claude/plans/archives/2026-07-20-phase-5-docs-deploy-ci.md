@@ -230,17 +230,33 @@ needed). `CGO_ENABLED=0` static build is required for `static-debian12`.
 docker build -t controlplane-api:dev ./apps/backend
 ```
 
-**Not run** — Docker Desktop's daemon wasn't reachable in this environment
-(`docker version` succeeds for the client, but connecting to
-`npipe:////./pipe/dockerDesktopLinuxEngine` fails: daemon not running).
-Verified instead with `go build ./...` + `go vet ./...` + `go test ./...`
-(all clean — `cmd/healthcheck` compiles as a normal Go binary, no new
-dependencies). `apps/backend/.dockerignore` doesn't exclude `cmd/healthcheck`
-or anything else the build needs. **Follow-up**: once Docker Desktop is
-running, run `docker build -t controlplane-api:dev ./apps/backend`, then
-`docker run --rm -e PORT=3000 ... controlplane-api:dev` and confirm
-`docker inspect --format='{{json .State.Health}}'` reports `healthy` after
-the `start-period`.
+**✅ Verified live (2026-07-21), once Docker Desktop was started:**
+
+- `docker build -t controlplane-api:dev ./apps/backend` — succeeds; final
+  image `57.2MB`, both `api` and `healthcheck` binaries built in the same
+  builder stage.
+- `docker compose up -d --build api` (against real `db`+`redis` compose
+  services, migrations already applied) — container reaches
+  `Up ... (healthy)` within the 10s `start-period`.
+- `docker inspect controlplane-api --format='{{json .State.Health}}'` shows
+  `"Status": "healthy"`, two consecutive health-check log entries with
+  `"ExitCode": 0`.
+- Container logs confirm the healthcheck binary's requests: `GET /health
+  status=200`.
+- `docker inspect --format='User: {{.Config.User}}'` → `65532` (distroless
+  `nonroot`, confirming no root escalation).
+- Live endpoint checks against the running container:
+  - `GET /health` → `{"status":"ok","uptime":...}`
+  - `GET /swagger` → `301 Moved Permanently` → `Location: /swagger/index.html`
+  - `GET /swagger/index.html` → `200`
+  - `GET /swagger/doc.json` → valid OpenAPI 2.0 doc, `info.title: "Controlplane API"`,
+    matches the statically-inspected spec from Step 1.
+- `docker exec controlplane-api /app/healthcheck` → exit `0` (confirms the
+  binary is independently runnable, not just wired into `HEALTHCHECK`).
+- Cleaned up with `docker compose down`; no leftover containers.
+
+This also serves as the live `/swagger` UI smoke test that Step 1 had
+deferred (Docker wasn't available at the time).
 
 ---
 
@@ -374,14 +390,14 @@ curl -s localhost:3000/swagger/doc.json | head
 
 1. ✅ `/swagger` serves Swagger UI with all 16 routes, correct tags, request/
    response schemas, and BearerAuth security; `swagger.json` matches
-   `docs/02-api-contract.md` (statuses + messages). *(Live UI smoke test
-   still outstanding — Docker wasn't available; static spec inspection done.)*
+   `docs/02-api-contract.md` (statuses + messages). Live-verified against a
+   running container (see Step 2c).
 2. ✅ Generated `apps/backend/docs/` committed-ready; regeneration is
    idempotent via `make swagger`.
-3. 🟡 `docker build ./apps/backend` produces a distroless image whose
-   `HEALTHCHECK` binary passes against a running container. *(Dockerfile +
-   healthcheck binary shipped and compile-clean; live `docker build`/`docker
-   run` verification still outstanding — Docker daemon unavailable here.)*
+3. ✅ `docker build ./apps/backend` produces a distroless image (57.2MB)
+   whose `HEALTHCHECK` binary passes against a running container —
+   verified live via `docker compose up -d --build api` + `docker inspect`
+   (see Step 2c).
 4. ⬜ `k8s/` applies cleanly; env vars match Go config (`APP_ENV`, not `NODE_ENV`).
 5. ⬜ CI: `lint` + backend + docker build green; `release.yml` present.
 6. ✅ `go test ./...` unchanged — no behavior regressions.
