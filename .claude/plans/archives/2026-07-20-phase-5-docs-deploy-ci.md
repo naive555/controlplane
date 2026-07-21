@@ -434,16 +434,79 @@ deploy.
 
 ---
 
-## Step 5 — CI + release parity — pending
+## Step 5 — CI + release parity — ✅ DONE (2026-07-21, not yet committed)
 
 ### 5a. `.github/workflows/ci.yml`
 
-Add a `lint` job (golangci-lint-action) and a docker-build step/job.
+Added a `lint` job and a `docker` job. Deviation from the draft: looked up
+current action versions rather than guessing — `golangci-lint-action` is
+now on **v9** (checked via WebFetch against the action's GitHub page,
+2026-07-21), and **v7+ is required for golangci-lint v2's config schema**
+(v7.0.0 dropped v1 support). Pinned `version: v2.12.2` in the action to
+match the exact version installed and verified locally in Step 3, avoiding
+any local/CI drift.
+
+```yaml
+lint:
+  name: Lint
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with:
+        go-version: "1.26"
+    - uses: golangci/golangci-lint-action@v9
+      with:
+        version: v2.12.2
+        working-directory: apps/backend
+```
+
+`docker` job added after `backend`, depending on both:
+
+```yaml
+docker:
+  name: Docker build
+  runs-on: ubuntu-latest
+  needs: [lint, backend]
+  steps:
+    - uses: actions/checkout@v4
+    - name: Build image
+      run: docker build -t controlplane-api:ci ./apps/backend
+```
+
+Final job graph: `lint`, `backend`, `docker` (needs `[lint, backend]`),
+`frontend` (unchanged, independent).
 
 ### 5b. `.github/workflows/release.yml` — new
 
-Port source's ghcr push-on-CI-success workflow, with
-`context: ./apps/backend` and `permissions.packages: write`.
+Ported source's ghcr push-on-CI-success workflow with
+`context: ./apps/backend` and `permissions.packages: write` as drafted.
+**Deviation**: also bumped the two Docker actions past what the source
+pins — `docker/login-action@v3` → **`@v4`** and
+`docker/build-push-action@v5` → **`@v7`** (checked current versions via
+WebFetch; source's pins are stale relative to today). `docker/login-action`
+and `docker/build-push-action` versions confirmed as of 2026-07-21.
+
+### Verification
+
+- `.github/workflows/ci.yml` and `release.yml` both parse as valid YAML
+  (`yaml.safe_load_all`); `ci.yml`'s job graph confirmed
+  (`docker.needs == [lint, backend]`).
+- Ran the equivalent of every new CI step locally: `go vet ./...` (clean),
+  `go build ./...` (clean), `go test ./...` (clean), `golangci-lint run`
+  (same 3-CRLF-file gofmt flakiness noted in Step 3 — not a real issue, CI
+  is LF-native), `docker build -t controlplane-api:ci ./apps/backend`
+  (succeeds, cached from Step 2's identical Dockerfile).
+- **Not run**: the actual GitHub Actions workflows themselves (`act` isn't
+  installed in this environment, and running real CI requires pushing/
+  opening a PR). **Follow-up**: once pushed, watch the first CI run —
+  particularly the `lint` job (first time `golangci-lint-action@v9` +
+  `v2.12.2` runs in this repo's CI) and the `release.yml` trigger (fires on
+  `workflow_run` after CI succeeds on `main` — will only be exercised once
+  this branch merges to `main`).
+
+**Not committed yet** — working tree only, per prior instruction (no new
+instruction to commit was given for this step).
 
 ---
 
@@ -492,8 +555,14 @@ curl -s localhost:3000/swagger/doc.json | head
    whose `HEALTHCHECK` binary passes against a running container —
    verified live via `docker compose up -d --build api` + `docker inspect`
    (see Step 2c).
-4. ⬜ `k8s/` applies cleanly; env vars match Go config (`APP_ENV`, not `NODE_ENV`).
-5. ⬜ CI: `lint` + backend + docker build green; `release.yml` present.
+4. 🟡 `k8s/` env vars match Go config (`APP_ENV`, not `NODE_ENV`) — confirmed
+   against `internal/config/config.go`. All 11 manifests YAML-valid with
+   correct `kind`s; full `kubectl --dry-run=client` schema validation still
+   outstanding (no cluster configured here — see Step 4 follow-up).
+5. 🟡 CI: `lint` + backend + docker build jobs added, `release.yml` present,
+   both YAML-valid and every step's command verified locally — actual
+   GitHub Actions execution still outstanding (needs a push/PR; see Step 5
+   follow-up).
 6. ✅ `go test ./...` unchanged — no behavior regressions.
 7. ⬜ README + CLAUDE.md status updated.
 
