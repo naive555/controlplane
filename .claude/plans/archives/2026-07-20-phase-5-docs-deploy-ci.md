@@ -152,7 +152,9 @@ imported* by every referencing file (e.g. `httpx`, `apperror`), not in
 
 ---
 
-## Step 2 — Production Dockerfile (distroless + healthcheck binary) — pending
+## Step 2 — Production Dockerfile (distroless + healthcheck binary) — ✅ DONE (2026-07-21)
+
+Shipped exactly as drafted below, no deviations.
 
 ### 2a. New `apps/backend/cmd/healthcheck/main.go`
 
@@ -227,6 +229,18 @@ needed). `CGO_ENABLED=0` static build is required for `static-debian12`.
 ```bash
 docker build -t controlplane-api:dev ./apps/backend
 ```
+
+**Not run** — Docker Desktop's daemon wasn't reachable in this environment
+(`docker version` succeeds for the client, but connecting to
+`npipe:////./pipe/dockerDesktopLinuxEngine` fails: daemon not running).
+Verified instead with `go build ./...` + `go vet ./...` + `go test ./...`
+(all clean — `cmd/healthcheck` compiles as a normal Go binary, no new
+dependencies). `apps/backend/.dockerignore` doesn't exclude `cmd/healthcheck`
+or anything else the build needs. **Follow-up**: once Docker Desktop is
+running, run `docker build -t controlplane-api:dev ./apps/backend`, then
+`docker run --rm -e PORT=3000 ... controlplane-api:dev` and confirm
+`docker inspect --format='{{json .State.Health}}'` reports `healthy` after
+the `start-period`.
 
 ---
 
@@ -364,8 +378,10 @@ curl -s localhost:3000/swagger/doc.json | head
    still outstanding — Docker wasn't available; static spec inspection done.)*
 2. ✅ Generated `apps/backend/docs/` committed-ready; regeneration is
    idempotent via `make swagger`.
-3. ⬜ `docker build ./apps/backend` produces a distroless image whose
-   `HEALTHCHECK` binary passes against a running container.
+3. 🟡 `docker build ./apps/backend` produces a distroless image whose
+   `HEALTHCHECK` binary passes against a running container. *(Dockerfile +
+   healthcheck binary shipped and compile-clean; live `docker build`/`docker
+   run` verification still outstanding — Docker daemon unavailable here.)*
 4. ⬜ `k8s/` applies cleanly; env vars match Go config (`APP_ENV`, not `NODE_ENV`).
 5. ⬜ CI: `lint` + backend + docker build green; `release.yml` present.
 6. ✅ `go test ./...` unchanged — no behavior regressions.
