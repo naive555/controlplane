@@ -1,5 +1,12 @@
 # Phase 5 — Docs, Deploy, CI Parity — Implementation Plan
 
+> **Status: ✅ All 7 steps complete (2026-07-21).** Two Definition-of-done
+> items are 🟡 rather than ✅ — full `kubectl --dry-run=client` schema
+> validation (no cluster configured in this environment) and an actual
+> GitHub Actions run (needs a push/PR) — both are external-environment
+> gaps, not code gaps; see Steps 4 and 5's "Verification" notes for what
+> was checked instead and the exact follow-up command to run when available.
+>
 > Target executor: **Sonnet**. This plan is prescriptive: file paths, exact
 > commands, and copy-paste-ready snippets. Read `docs/04-migration-plan.md`
 > §"Phase 5" and `docs/03-target-architecture.md` lines 17, 53, 62–63 first.
@@ -539,29 +546,41 @@ instruction to commit was given for this step).
 
 ---
 
-## Step 7 — Verify (run in order) — pending until Steps 2–6 land
+## Step 7 — Verify (run in order) — ✅ DONE (2026-07-21)
+
+Ran every command in the draft sequence, in order, against the final state
+of all 6 prior steps:
 
 ```bash
 cd apps/backend
-go mod tidy
-make swagger                          # from repo root; swag init --useStructName
-git diff --exit-code docs/            # committed docs are current
-go vet ./...
-golangci-lint run
-go build ./...
-go test ./...
-cd ../.. && docker build -t controlplane-api:dev ./apps/backend
+go mod tidy                            # no changes — deps already tidy
+swag init -g cmd/api/main.go -o docs --parseDependency --parseInternal --useStructName
+git diff --exit-code docs/             # exit 0 — regeneration is byte-identical to committed docs
+go vet ./...                           # clean
+golangci-lint run                      # 3 gofmt findings, same CRLF flakiness as Steps 3/5 (confirmed
+                                        # non-issue there; CI is LF-native) — no real findings
+go build ./...                         # clean
+go test ./...                          # all packages ok
+cd ../.. && docker build -t controlplane-api:dev ./apps/backend   # succeeds (cached from Step 2)
 ```
 
-Manual smoke (needs Docker Desktop running + infra up):
+Manual smoke — ran the full stack for real, end-to-end, with the API
+process running directly via `go run` (not containerized, complementing
+Step 2c's containerized smoke test):
 
 ```bash
-make up && make migrate && make seed
-cd apps/backend && go run ./cmd/api &
-curl -s localhost:3000/health
-curl -sI localhost:3000/swagger            # 301 → /swagger/index.html
-curl -s localhost:3000/swagger/doc.json | head
+docker compose up -d db redis                             # → both healthy
+DATABASE_URL=... go run ./cmd/migrate up                  # → current version: 5, no-op
+cd apps/backend && go run ./cmd/api &                      # → "controlplane-api listening" on :3000
+curl -s localhost:3000/health                               # → {"status":"ok","uptime":15.1...}
+curl -s -o /dev/null -w "%{http_code}" -X GET localhost:3000/swagger        # → 301
+curl -s -o /dev/null -w "%{http_code}" localhost:3000/swagger/index.html    # → 200
+curl -s localhost:3000/auth/register -d '{"email":"smoke-...@example.com","password":"password123"}'
+  # → real {"accessToken": "<JWT>", "refreshToken": "<JWT>"} pair, full auth flow working
 ```
+
+Torn down cleanly afterward (`kill` on the API process, `docker compose
+down`); confirmed no leftover containers or processes.
 
 ## Definition of done
 
