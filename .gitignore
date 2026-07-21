@@ -13,6 +13,10 @@ apps/frontend/.env.local
 apps/backend/tmp/
 apps/backend/bin/
 
+# K8s secrets
+k8s/secret.yaml
+k8s/**/secret.yaml
+
 # Logs
 *.log
 

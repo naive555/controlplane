@@ -347,42 +347,90 @@ working tree.
 
 ---
 
-## Step 4 — k8s manifests — pending
+## Step 4 — k8s manifests — ✅ DONE (2026-07-21, not yet committed)
 
-Create `./k8s/` at repo root, porting `../controlplane-api/k8s/`. Copy files
-verbatim then apply these edits:
+Ported `../controlplane-api/k8s/` to `./k8s/` at repo root, verbatim except
+where noted. Final layout matches the draft exactly:
 
-### 4a. `k8s/configmap.yaml` — env parity
-
-```yaml
-data:
-  APP_ENV: production
-  APP_NAME: controlplane-api
-  LOG_LEVEL: info
-  PORT: "3000"
-  JWT_ACCESS_EXPIRES_IN: 15m
-  JWT_REFRESH_EXPIRES_IN: "604800"
+```
+k8s/
+├── README.md                  # new — apply instructions + Phase 6 note
+├── namespace.yaml              # unchanged
+├── configmap.yaml              # env parity (see 4a)
+├── secret.example.yaml         # unchanged content, fixed a source typo (see 4b)
+├── api/
+│   ├── deployment.yaml         # unchanged
+│   ├── service.yaml            # unchanged
+│   └── ingress.yaml            # unchanged
+├── postgres/
+│   ├── statefulset.yaml        # unchanged
+│   ├── service.yaml            # unchanged
+│   └── secret.example.yaml     # unchanged
+└── redis/
+    ├── deployment.yaml         # unchanged
+    └── service.yaml            # unchanged
 ```
 
-### 4b. `k8s/secret.example.yaml`
+### 4a. `k8s/configmap.yaml` — env parity, done as drafted
 
-Keep `stringData` with `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`,
-`DATABASE_URL`, `REDIS_URL`. Copy to `secret.yaml`, gitignored.
+`NODE_ENV: production` → `APP_ENV: production` + added `APP_NAME:
+controlplane-api`. Verified all 6 keys against `internal/config/config.go`'s
+actual `getEnv`/`os.Getenv` calls (`APP_NAME`, `APP_ENV`, `PORT`,
+`LOG_LEVEL`, `JWT_ACCESS_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN`) — exact match.
 
-### 4c. `k8s/api/deployment.yaml`
+### 4b. `k8s/secret.example.yaml` — one incidental fix
 
-Keep liveness/readiness probes against `/health`. Image name/pull policy per
-target (kind/minikube vs ghcr).
+Kept `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET`/`DATABASE_URL`/`REDIS_URL`.
+Fixed a source typo while porting: the source's example used
+`DATABASE_URL: database://user:password@...` (invalid scheme, presumably a
+copy-paste slip) — changed to `postgres://...` to match this project's
+actual connection string format. Confirmed the source's real (gitignored,
+untracked) `k8s/secret.yaml` was **not** copied over — only the committed
+`.example.yaml` templates were ported, consistent with `k8s/secret.yaml`
+and `k8s/**/secret.yaml` being gitignored in the source. Added the same two
+gitignore lines to this repo's root `.gitignore`.
 
-### 4d. Copy unchanged
+### 4c. `k8s/api/deployment.yaml` — unchanged from source
+
+Liveness/readiness probes against `/health` kept as-is;
+`image: controlplane-api:latest` / `imagePullPolicy: Never` kept for local
+kind/minikube use (swap for a ghcr tag + `IfNotPresent` when deploying to a
+real cluster off Step 5's release workflow — not done here, out of scope).
+
+### 4d. Copied unchanged
 
 `namespace.yaml`, `api/service.yaml`, `api/ingress.yaml`,
 `postgres/{statefulset,service,secret.example}.yaml`,
-`redis/{deployment,service}.yaml`.
+`redis/{deployment,service}.yaml` — byte-identical to source (image tags
+`postgres:16-alpine`/`redis:7-alpine` already match this project's
+`compose.yaml`).
 
-### 4e. `web` Deployment — defer to Phase 6
+### 4e. `web` Deployment — deferred to Phase 6, done as drafted
 
-Add `k8s/README.md` noting web/ manifests land in Phase 6.
+Added `k8s/README.md` with the manifest layout, apply instructions, and an
+explicit "Not here yet" section noting the frontend Deployment/Service land
+in Phase 6.
+
+### Verification — deviation from the plan's `kubectl --dry-run=client` step
+
+No Kubernetes cluster is configured in this environment (Docker Desktop's
+Kubernetes is not enabled — `kubectl config get-contexts` returns empty),
+and `kubectl apply --dry-run=client` (even with `--validate=false`) still
+calls the API server for resource-type discovery, so it fails with a
+connection error regardless of `--dry-run`/`--validate` flags — there is no
+way to do a pure offline `kubectl apply` dry-run without a live (or
+kind/minikube) cluster. **Fallback used**: parsed all 11 YAML files with
+`yaml.safe_load_all` (Python) — every file parses cleanly and each
+document's `kind` matches what's expected (`Namespace`, `ConfigMap`,
+`Secret`×3, `Deployment`×2, `Service`×3, `StatefulSet`, `Ingress`). Given
+these are near-verbatim ports of the source's already-deployed manifests
+(only `configmap.yaml`'s data keys and the one `secret.example.yaml` typo
+changed), schema risk is low. **Follow-up**: if/when a local cluster (kind,
+minikube, or Docker Desktop Kubernetes) is available, run `kubectl apply
+--dry-run=client -f k8s/ -R` for full schema validation before any real
+deploy.
+
+**Not committed yet** — working tree only, per instruction.
 
 ---
 
