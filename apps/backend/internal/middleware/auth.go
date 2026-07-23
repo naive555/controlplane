@@ -202,7 +202,7 @@ func (g *Guards) RequirePermission(action string) echo.MiddlewareFunc {
 
 // bearerToken extracts the token from an "Authorization: Bearer <token>"
 // header, or "" if absent — mirrors
-// headers.authorization?.replace('Bearer ', '') in the source app.
+// headers.authorization?.replace("Bearer ", "") in the source app.
 func bearerToken(c echo.Context) string {
 	const prefix = "Bearer "
 	h := c.Request().Header.Get(echo.HeaderAuthorization)

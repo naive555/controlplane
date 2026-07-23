@@ -229,7 +229,7 @@ func (h *Handler) issueTokenPair(c echo.Context, userID uuid.UUID, email string)
 
 // bearerToken extracts the token from an "Authorization: Bearer <token>"
 // header, or "" if absent — mirrors
-// headers.authorization?.replace('Bearer ', '') in the source app.
+// headers.authorization?.replace("Bearer ", "") in the source app.
 func bearerToken(c echo.Context) string {
 	return strings.TrimPrefix(c.Request().Header.Get(echo.HeaderAuthorization), "Bearer ")
 }
