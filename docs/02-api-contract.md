@@ -108,6 +108,7 @@ Recorded actions: `user.login`, `user.register`, `org.created`, `org.member.invi
 | ----------- | ----- | ---- | -------- |
 | `GET /subscription` | org | — | Org's subscription incl. plan (nullable if none). |
 | `POST /subscription/assign` | org | `{ planId }` | Upsert org subscription. ⚠️ Source has no admin check — see quirks in 01-source-analysis.md. |
+| `GET /plans` | auth | — | All available plans: `[{ id, name, limits, createdAt }]`. **Not in the source app** — added in Phase 6 so the frontend subscription page can populate a plan picker (plan ids are server-generated UUIDs with no fixed/knowable value otherwise). Global, not org-scoped, so `auth` not `org` guard. |
 
 ### API docs
 

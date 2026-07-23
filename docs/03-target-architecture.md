@@ -140,3 +140,16 @@ Not treated as deviations (kept bug-for-bug): duplicate actions in a `permission
    and over direct cross-origin calls (would require adding + maintaining
    CORS policy on the backend for no behavioral benefit, since the frontend
    and backend are always deployed together here).
+3. **New `GET /plans` endpoint.** The Phase 6 plan's original Step 10 draft
+   assumed the frontend could hardcode the seeded plans' ids, but
+   `plans.id` is `uuid PRIMARY KEY DEFAULT gen_random_uuid()`
+   (`migrations/00005_plans_org_subscriptions.sql`) — genuinely random per
+   database, not stable across dev/CI/prod. With no `GET /plans` endpoint,
+   the frontend had no way to discover any plan id at all unless an org
+   already had one assigned (which only reveals the *current* plan, not the
+   other choices). Confirmed with the owner (three options: add the
+   endpoint, a raw-UUID text input, or a view-only page with no assign
+   flow) — decided to add `GET /plans` (`RequireAuth` only; plans are
+   global, not org-scoped): returns `[{ id, name, limits, createdAt }]`.
+   See `docs/02-api-contract.md` Subscription table and
+   `.claude/plans/plan.md` Step 10.
