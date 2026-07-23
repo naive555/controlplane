@@ -2,7 +2,7 @@
 
 A monorepo rewrite of [`controlplane-api`](../controlplane-api) (Bun + ElysiaJS) into **Go (backend) + Next.js (frontend)** — a multi-tenant B2B SaaS platform template (auth, organizations, RBAC, audit logs, subscription limits). See [`docs/`](docs/) for the full analysis, API contract, target architecture, and migration plan, and [`CLAUDE.md`](CLAUDE.md) for ground rules.
 
-**Status**: Phase 5 (docs, deploy, CI parity) complete — `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` (bcrypt, JWT access/refresh pairs, session rotation with reuse detection, Redis blacklist + login rate limiting), `POST/GET /organizations`, `POST /organizations/invite`, `DELETE /organizations/members/:userId`, `GET/POST /rbac/roles`, `PUT /rbac/roles/:roleId/permissions`, `POST /rbac/assign`, `GET /subscription`, `POST /subscription/assign`, and `GET /audit-logs` are all live and documented at [`/swagger`](#swagger--api-docs). The backend ships as a distroless Docker image with k8s manifests and CI lint/build/release workflows. The frontend lands in Phase 6.
+**Status**: Phase 6 (frontend) complete — the full stack is live. Backend: `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` (bcrypt, JWT access/refresh pairs, session rotation with reuse detection, Redis blacklist + login rate limiting), `POST/GET /organizations`, `GET /organizations/members`, `POST /organizations/invite`, `DELETE /organizations/members/:userId`, `GET/POST /rbac/roles`, `PUT /rbac/roles/:roleId/permissions`, `POST /rbac/assign`, `GET /subscription`, `POST /subscription/assign`, `GET /plans`, and `GET /audit-logs` are all live and documented at [`/swagger`](#swagger--api-docs) (`GET /organizations/members` and `GET /plans` are Phase 6 additions not present in the source app — see `docs/03-target-architecture.md` "Deviations resolved during Phase 6"). The backend ships as a distroless Docker image with k8s manifests and CI lint/build/release workflows. Frontend: a Next.js dashboard (App Router + shadcn/ui + TanStack Query) covering every module — auth, organizations + switcher, members, RBAC roles, audit logs, subscription — talking to the API through a same-origin runtime proxy (see [Frontend](#frontend) below).
 
 ## Prerequisites
 
@@ -19,9 +19,10 @@ make migrate   # apply database schema (goose)
 make seed      # insert default plans (free/pro/enterprise)
 
 make api       # terminal 1 — Go API on :3000
-make web       # terminal 2 — Next.js dev server (defaults to :3000; auto-shifts to :3001 if :3000 is taken)
+make web       # terminal 2 — Next.js dev server on :4000
 
 curl localhost:3000/health
+open http://localhost:4000   # dashboard — register a user to get started
 ```
 
 Regenerating sqlc query code (only needed after editing `apps/backend/internal/infra/database/queries/*.sql`) requires the `sqlc` CLI: `go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest`, then `make sqlc`.
@@ -141,13 +142,41 @@ curl -s 'localhost:3000/audit-logs?action=org.created&limit=10' \
   -H 'x-organization-id: <orgId>'
 ```
 
+## Frontend
+
+With `make up` (db + redis) and `make api` running, start the dashboard:
+
+```bash
+make web   # cd apps/frontend && pnpm dev — Next.js on :4000
+```
+
+Open [`localhost:4000`](http://localhost:4000) and register a user — the app redirects `/` → `/login`/`/organizations` depending on session state, and every page (Organizations, Members, Roles, Audit Logs, Subscription) is wired to the live API.
+
+The browser never calls the Go API directly. `app/api/[...path]/route.ts` is a runtime reverse proxy: the browser only ever calls same-origin `/api/*`, and the proxy forwards to `BACKEND_URL` (default `http://localhost:3000`, see `apps/frontend/.env.local.example`) — read fresh on every request, not baked into the build, so the same production image works across environments (compose sets it to `http://api:3000` via the container network). This is a Route Handler rather than a `next.config.ts` `rewrites()` entry deliberately: `next.config.ts` is resolved once at `next build` time, so an env var read there can't reflect a different value at container runtime.
+
+Auth tokens: the access token lives in memory only (lost on a full page reload by design); the refresh token persists in `localStorage` and is used to silently re-authenticate on load. The API client single-flights concurrent 401s through one `/auth/refresh` call and retries the original request once. See `apps/frontend/README.md` for the full breakdown.
+
+```bash
+cd apps/frontend
+pnpm install
+pnpm dev                # :4000
+pnpm build               # production build (also runs typecheck)
+pnpm exec tsc --noEmit   # typecheck only
+pnpm test                # vitest
+pnpm lint                # eslint
+```
+
 ## Docker
 
-`apps/backend/Dockerfile` is a multi-stage build: a `golang:1.26-alpine` builder compiles the API and a small `healthcheck` binary, and the runner is [`gcr.io/distroless/static-debian12:nonroot`](https://github.com/GoogleContainerTools/distroless) — no shell, so `HEALTHCHECK` runs the dedicated `healthcheck` binary instead of `curl`.
+`apps/backend/Dockerfile` is a multi-stage build: a `golang:1.26-alpine` builder compiles the API and a small `healthcheck` binary, and the runner is [`gcr.io/distroless/static-debian12:nonroot`](https://github.com/GoogleContainerTools/distroless) — no shell, so `HEALTHCHECK` runs the dedicated `healthcheck` binary instead of `curl`. `apps/frontend/Dockerfile` builds the Next.js standalone output on `node:22-alpine`; the runner sets `HOSTNAME=0.0.0.0` explicitly (the standalone server otherwise binds to the container's assigned network IP, not all interfaces — a loopback-based `HEALTHCHECK` fails silently otherwise).
 
 ```bash
 docker build -t controlplane-api:dev ./apps/backend
-docker compose up -d --build api   # against the db/redis services in compose.yaml
+docker build -t controlplane-web:dev ./apps/frontend
+
+# full stack: db, redis, api, web — web waits for api's HEALTHCHECK
+docker compose up -d --build
+open http://localhost:4000
 ```
 
 ## Kubernetes
@@ -162,15 +191,15 @@ kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/ -R
 ```
 
-The frontend's `web` Deployment lands in Phase 6.
+The frontend's `web` Deployment/Service aren't ported yet — the `api`/`postgres`/`redis` manifests are current; `web` is a follow-up (compose already runs the full stack, see Docker above).
 
 ## Layout
 
 ```
 apps/backend/    Go API (Echo)
-apps/frontend/   Next.js dashboard
+apps/frontend/   Next.js dashboard (App Router + shadcn/ui + TanStack Query)
 docs/            Migration analysis, API contract, architecture, plan
-k8s/             Kubernetes manifests (api/postgres/redis; web/ lands in Phase 6)
+k8s/             Kubernetes manifests (api/postgres/redis; web/ not yet ported)
 ```
 
 ## Common commands
@@ -193,4 +222,6 @@ make tidy            # go mod tidy
 make fmt             # go fmt ./...
 ```
 
-Full container stack (including the frontend) can be built with `docker compose build`; the `web` service is defined but commented out in `compose.yaml` until Phase 6 wires up the dashboard.
+Frontend-specific commands (`pnpm lint`, `pnpm test`, `pnpm exec tsc --noEmit`) aren't wired into the root Makefile yet — run them from `apps/frontend/`, see [Frontend](#frontend) above.
+
+Full container stack (db, redis, api, web) comes up with `docker compose up -d --build` — see [Docker](#docker) above.

@@ -40,5 +40,7 @@ real secrets.
 
 ## Not here yet
 
-The frontend `web` Deployment/Service lands in **Phase 6** alongside the
-Next.js Dockerfile and compose service.
+The frontend `web` Deployment/Service aren't ported yet. The Next.js
+Dockerfile and compose service (Phase 6) are done — see
+`apps/frontend/Dockerfile` and `compose.yaml`'s `web` service — porting that
+to a k8s Deployment/Service/Ingress alongside `api/` is a follow-up.
