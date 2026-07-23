@@ -26,3 +26,15 @@ FROM memberships m
 JOIN organizations o ON o.id = m.organization_id
 WHERE m.user_id = $1
 ORDER BY m.created_at ASC;
+
+-- name: ListOrganizationMembers :many
+SELECT
+  m.user_id,
+  u.email,
+  u.display_name,
+  m.role,
+  m.created_at AS joined_at
+FROM memberships m
+JOIN users u ON u.id = m.user_id
+WHERE m.organization_id = $1
+ORDER BY m.created_at ASC;

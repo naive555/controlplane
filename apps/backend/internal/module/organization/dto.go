@@ -45,3 +45,13 @@ type MembershipResponse struct {
 type SuccessResponse struct {
 	Success bool `json:"success"`
 }
+
+// MemberResponse is one element of the GET /organizations/members response:
+// a roster entry combining the user and their role in the active org.
+type MemberResponse struct {
+	UserID      uuid.UUID `json:"userId"`
+	Email       string    `json:"email"`
+	DisplayName *string   `json:"displayName"`
+	Role        string    `json:"role"`
+	JoinedAt    time.Time `json:"joinedAt"`
+}

@@ -18,15 +18,16 @@ import (
 // ---- hand-mocked orgStore ----
 
 type mockOrgStore struct {
-	getOrganizationBySlug func(ctx context.Context, slug string) (db.Organization, error)
-	createOrganization    func(ctx context.Context, arg db.CreateOrganizationParams) (db.Organization, error)
-	createMembership      func(ctx context.Context, arg db.CreateMembershipParams) (db.Membership, error)
-	getMembership         func(ctx context.Context, arg db.GetMembershipParams) (db.Membership, error)
-	countMembershipsByOrg func(ctx context.Context, organizationID uuid.UUID) (int64, error)
-	deleteMembership      func(ctx context.Context, arg db.DeleteMembershipParams) error
-	listMembershipsByUser func(ctx context.Context, userID uuid.UUID) ([]db.ListMembershipsByUserRow, error)
-	getUserByEmail        func(ctx context.Context, email string) (db.User, error)
-	withTx                func(ctx context.Context, fn func(q *db.Queries) error) error
+	getOrganizationBySlug   func(ctx context.Context, slug string) (db.Organization, error)
+	createOrganization      func(ctx context.Context, arg db.CreateOrganizationParams) (db.Organization, error)
+	createMembership        func(ctx context.Context, arg db.CreateMembershipParams) (db.Membership, error)
+	getMembership           func(ctx context.Context, arg db.GetMembershipParams) (db.Membership, error)
+	countMembershipsByOrg   func(ctx context.Context, organizationID uuid.UUID) (int64, error)
+	deleteMembership        func(ctx context.Context, arg db.DeleteMembershipParams) error
+	listMembershipsByUser   func(ctx context.Context, userID uuid.UUID) ([]db.ListMembershipsByUserRow, error)
+	listOrganizationMembers func(ctx context.Context, organizationID uuid.UUID) ([]db.ListOrganizationMembersRow, error)
+	getUserByEmail          func(ctx context.Context, email string) (db.User, error)
+	withTx                  func(ctx context.Context, fn func(q *db.Queries) error) error
 }
 
 func (m *mockOrgStore) GetOrganizationBySlug(ctx context.Context, slug string) (db.Organization, error) {
@@ -49,6 +50,9 @@ func (m *mockOrgStore) DeleteMembership(ctx context.Context, arg db.DeleteMember
 }
 func (m *mockOrgStore) ListMembershipsByUser(ctx context.Context, userID uuid.UUID) ([]db.ListMembershipsByUserRow, error) {
 	return m.listMembershipsByUser(ctx, userID)
+}
+func (m *mockOrgStore) ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]db.ListOrganizationMembersRow, error) {
+	return m.listOrganizationMembers(ctx, organizationID)
 }
 func (m *mockOrgStore) GetUserByEmail(ctx context.Context, email string) (db.User, error) {
 	return m.getUserByEmail(ctx, email)
@@ -101,6 +105,52 @@ func allowAllLimiter() *mockLimitEnforcer {
 		enforceLimit: func(ctx context.Context, organizationID uuid.UUID, key string, currentCount int) error {
 			return nil
 		},
+	}
+}
+
+// ---- ListMembers ----
+
+func TestService_ListMembers_HappyPath(t *testing.T) {
+	orgID := uuid.New()
+	want := []db.ListOrganizationMembersRow{
+		{UserID: uuid.New(), Email: "owner@example.com", Role: "owner"},
+		{UserID: uuid.New(), Email: "member@example.com", Role: "member"},
+	}
+	var gotOrgID uuid.UUID
+	store := &mockOrgStore{
+		listOrganizationMembers: func(ctx context.Context, organizationID uuid.UUID) ([]db.ListOrganizationMembersRow, error) {
+			gotOrgID = organizationID
+			return want, nil
+		},
+	}
+	spy := &spyQuerier{}
+	svc := NewService(store, newTestAudit(spy), allowAllLimiter())
+
+	got, err := svc.ListMembers(context.Background(), orgID)
+	if err != nil {
+		t.Fatalf("ListMembers: %v", err)
+	}
+	if gotOrgID != orgID {
+		t.Errorf("ListOrganizationMembers called with org=%v, want %v", gotOrgID, orgID)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("ListMembers returned %d rows, want %d", len(got), len(want))
+	}
+}
+
+func TestService_ListMembers_StoreError(t *testing.T) {
+	wantErr := errors.New("boom")
+	store := &mockOrgStore{
+		listOrganizationMembers: func(ctx context.Context, organizationID uuid.UUID) ([]db.ListOrganizationMembersRow, error) {
+			return nil, wantErr
+		},
+	}
+	spy := &spyQuerier{}
+	svc := NewService(store, newTestAudit(spy), allowAllLimiter())
+
+	_, err := svc.ListMembers(context.Background(), uuid.New())
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("err = %v, want %v", err, wantErr)
 	}
 }
 

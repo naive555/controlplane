@@ -93,6 +93,19 @@ definitions:
       success:
         type: boolean
     type: object
+  MemberResponse:
+    properties:
+      displayName:
+        type: string
+      email:
+        type: string
+      joinedAt:
+        type: string
+      role:
+        type: string
+      userId:
+        type: string
+    type: object
   MembershipResponse:
     properties:
       createdAt:
@@ -511,6 +524,36 @@ paths:
       security:
       - BearerAuth: []
       summary: Invite a member
+      tags:
+      - organizations
+  /organizations/members:
+    get:
+      parameters:
+      - description: Active organization ID
+        in: header
+        name: x-organization-id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/MemberResponse'
+            type: array
+        "400":
+          description: Missing x-organization-id header
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+        "403":
+          description: Not a member of this organization
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List organization members
       tags:
       - organizations
   /organizations/members/{userId}:

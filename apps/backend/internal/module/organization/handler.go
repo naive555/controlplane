@@ -23,12 +23,13 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
-// Register mounts the four /organizations routes on the given group, guarded
-// per docs/02-api-contract.md: create/list are auth-only, invite/remove are
-// org-scoped.
+// Register mounts the five /organizations routes on the given group, guarded
+// per docs/02-api-contract.md: create/list are auth-only, members/invite/
+// remove are org-scoped.
 func (h *Handler) Register(g *echo.Group, guards *appmw.Guards) {
 	g.POST("", h.create, guards.RequireAuth())
 	g.GET("", h.list, guards.RequireAuth())
+	g.GET("/members", h.listMembers, guards.RequireOrg())
 	g.POST("/invite", h.invite, guards.RequireOrg())
 	g.DELETE("/members/:userId", h.removeMember, guards.RequireOrg())
 }
@@ -74,6 +75,30 @@ func (h *Handler) list(c echo.Context) error {
 	out := make([]MembershipResponse, len(rows))
 	for i, row := range rows {
 		out[i] = toMembershipResponse(row)
+	}
+
+	return c.JSON(http.StatusOK, out)
+}
+
+// listMembers returns the active organization's member roster.
+// @Summary  List organization members
+// @Tags     organizations
+// @Security BearerAuth
+// @Produce  json
+// @Param    x-organization-id  header    string  true  "Active organization ID"
+// @Success  200                {array}   MemberResponse
+// @Failure  400                {object}  httpx.ErrorResponse  "Missing x-organization-id header"
+// @Failure  403                {object}  httpx.ErrorResponse  "Not a member of this organization"
+// @Router   /organizations/members [get]
+func (h *Handler) listMembers(c echo.Context) error {
+	rows, err := h.service.ListMembers(c.Request().Context(), appmw.OrgID(c))
+	if err != nil {
+		return err
+	}
+
+	out := make([]MemberResponse, len(rows))
+	for i, row := range rows {
+		out[i] = toMemberResponse(row)
 	}
 
 	return c.JSON(http.StatusOK, out)
@@ -145,6 +170,16 @@ func toOrgResponse(org db.Organization) OrgResponse {
 		Slug:      org.Slug,
 		CreatedAt: org.CreatedAt,
 		UpdatedAt: org.UpdatedAt,
+	}
+}
+
+func toMemberResponse(row db.ListOrganizationMembersRow) MemberResponse {
+	return MemberResponse{
+		UserID:      row.UserID,
+		Email:       row.Email,
+		DisplayName: row.DisplayName,
+		Role:        row.Role,
+		JoinedAt:    row.JoinedAt,
 	}
 }
 

@@ -36,6 +36,7 @@ type orgStore interface {
 	CountMembershipsByOrg(ctx context.Context, organizationID uuid.UUID) (int64, error)
 	DeleteMembership(ctx context.Context, arg db.DeleteMembershipParams) error
 	ListMembershipsByUser(ctx context.Context, userID uuid.UUID) ([]db.ListMembershipsByUserRow, error)
+	ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]db.ListOrganizationMembersRow, error)
 	GetUserByEmail(ctx context.Context, email string) (db.User, error)
 	WithTx(ctx context.Context, fn func(q *db.Queries) error) error
 }
@@ -99,6 +100,13 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, name, slug strin
 // ListByUser returns userID's memberships with each organization embedded.
 func (s *Service) ListByUser(ctx context.Context, userID uuid.UUID) ([]db.ListMembershipsByUserRow, error) {
 	return s.store.ListMembershipsByUser(ctx, userID)
+}
+
+// ListMembers returns organizationID's member roster (user + role), ordered
+// by membership creation time. Guarded by RequireOrg, so the caller is
+// already verified as a member.
+func (s *Service) ListMembers(ctx context.Context, organizationID uuid.UUID) ([]db.ListOrganizationMembersRow, error) {
+	return s.store.ListOrganizationMembers(ctx, organizationID)
 }
 
 // Invite adds a new member to organizationID, called with the inviter's own

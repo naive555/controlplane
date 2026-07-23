@@ -100,7 +100,7 @@ make build       # both artifacts / docker images
 ## Open questions for the planning model (Opus)
 
 1. Should `POST /subscription/assign` gain an admin/permission guard (fixing the source oversight) or preserve bug-for-bug parity? (Recommend: fix, document as intentional deviation.)
-2. Add a `GET /organizations/members` list endpoint for the frontend, or keep strict parity and derive from audit logs? (Recommend: add — the frontend needs it.)
+2. ~~Add a `GET /organizations/members` list endpoint for the frontend, or keep strict parity and derive from audit logs?~~ **Resolved in Phase 6**: added. See "Deviations resolved during Phase 6" below.
 3. Hash refresh tokens at rest (source stores raw JWT)? (Recommend: yes if deviation allowed; keep raw for parity otherwise.)
 4. Testing depth: source has unit tests with mocked infra; Go port should decide unit (mock interfaces) vs. integration (testcontainers / CI service containers, matching source CI).
 5. Whether the access-token blacklist TTL should follow `JWT_ACCESS_EXPIRES_IN` instead of hard-coded 15 min.
@@ -114,3 +114,29 @@ Three intentional deviations from `../controlplane-api/src/modules/{rbac,subscri
 3. **`POST /subscription/assign` response body.** Source returns an empty 200 body (`void`). The Go port returns `{"success":true}`, matching the response shape of every other write endpoint (`invite`, `removeMember`, `rbac/assign`) for API consistency.
 
 Not treated as deviations (kept bug-for-bug): duplicate actions in a `permissions[]` array still hit the `(role_id, action)` unique constraint and surface as 500, same as source; a well-formed but nonexistent `planId` still fails at the plan foreign key (500) rather than a pre-checked `404`, since the contract has no `PLAN_NOT_FOUND` code.
+
+## Deviations resolved during Phase 6 (frontend)
+
+1. **New `GET /organizations/members` endpoint.** The source app has no member-
+   roster endpoint (Open question #2, above); the frontend members page needs
+   one, and deriving a live roster from audit logs was rejected as fragile
+   (audit logs record invite/remove *events*, not current membership state,
+   and aren't guaranteed complete — `role.created`/`role.assigned` are defined
+   but not written). Added `GET /organizations/members` (org-guarded, same
+   guard level as `invite`/`removeMember`): returns
+   `[{ userId, email, displayName, role, joinedAt }]` for the active org,
+   ordered by membership creation time. See `docs/02-api-contract.md`
+   Organizations table and `.claude/plans/plan.md` Step 1 for the full
+   implementation (sqlc query `ListOrganizationMembers` joining `memberships`
+   + `users`).
+2. **Frontend token/networking model.** The browser never talks to the Go API
+   directly. Next.js `next.config.ts` proxies `/api/:path*` → `BACKEND_URL`
+   via `rewrites()`, so all frontend requests are same-origin and **no CORS
+   middleware was added to the backend**. Access token is held in memory
+   (browser tab only); refresh token in `localStorage`; the API client
+   single-flights concurrent 401s through one `/auth/refresh` call and retries
+   the original request once. This was chosen over a cookie-based BFF (more
+   secure against XSS, but substantially more implementation for this phase)
+   and over direct cross-origin calls (would require adding + maintaining
+   CORS policy on the backend for no behavioral benefit, since the frontend
+   and backend are always deployed together here).
