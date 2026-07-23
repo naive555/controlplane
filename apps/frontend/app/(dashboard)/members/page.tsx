@@ -120,7 +120,9 @@ export default function MembersPage() {
                     render={({ field }) => (
                       <Select value={field.value} onValueChange={field.onChange}>
                         <SelectTrigger id="invite-role" className="w-full">
-                          <SelectValue />
+                          <SelectValue>
+                            {(value: string) => (value === "admin" ? "Admin" : "Member")}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="member">Member</SelectItem>
