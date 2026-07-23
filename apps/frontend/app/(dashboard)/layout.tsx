@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { FullPageSkeleton } from "@/components/full-page-skeleton";
+import { OrgSwitcher } from "@/components/org-switcher";
 import { Button } from "@/components/ui/button";
-import { getActiveOrgId } from "@/lib/auth/token-store";
 import { useSession } from "@/lib/auth/use-session";
+import { useActiveOrgId } from "@/lib/org/active-org";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS: { href: string; label: string; requiresOrg: boolean }[] = [
@@ -22,10 +23,7 @@ const NAV_ITEMS: { href: string; label: string; requiresOrg: boolean }[] = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { status, user, logoutSession } = useSession();
   const router = useRouter();
-  // Non-reactive on purpose: Step 6 introduces the real org-switcher context
-  // that other pages subscribe to. This layout only needs the value at
-  // render time (it re-reads on every navigation) to gate nav items.
-  const hasActiveOrg = Boolean(getActiveOrgId());
+  const hasActiveOrg = useActiveOrgId() !== null;
 
   useEffect(() => {
     if (status === "anon") {
@@ -73,10 +71,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
       <div className="flex flex-1 flex-col">
         <header className="flex items-center justify-between border-b px-6 py-3">
-          <div className="text-sm text-muted-foreground">{user?.email}</div>
-          <Button variant="outline" size="sm" onClick={() => void handleLogout()}>
-            Log out
-          </Button>
+          <OrgSwitcher />
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">{user?.email}</span>
+            <Button variant="outline" size="sm" onClick={() => void handleLogout()}>
+              Log out
+            </Button>
+          </div>
         </header>
         <main className="flex-1 p-6">{children}</main>
       </div>

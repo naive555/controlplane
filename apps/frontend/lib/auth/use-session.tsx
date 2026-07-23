@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 
 import { logout as logoutRequest, refresh as refreshRequest } from "@/lib/api/endpoints";
 
-import { clearTokens, getAccessToken, getRefreshToken, setTokens, type TokenPair } from "./token-store";
+import { clearTokens, getRefreshToken, setTokens, type TokenPair } from "./token-store";
 
 export type SessionStatus = "loading" | "authed" | "anon";
 
@@ -52,20 +52,13 @@ function stateFromAccessToken(accessToken: string | null): SessionState {
   return decoded ? { status: "authed", user: decoded } : { status: "anon", user: null };
 }
 
-// Resolves the state that's knowable synchronously on mount, without any
-// setState-in-effect: an in-memory access token (rare — only survives a
-// client-side remount, since it's wiped on every full page load) settles
-// immediately; otherwise stay "loading" iff a refresh token is persisted, so
-// the effect below has something to rehydrate. No tokens at all -> "anon"
-// immediately, nothing to wait for.
-function computeInitialState(): SessionState {
-  const existing = getAccessToken();
-  if (existing) return stateFromAccessToken(existing);
-  return getRefreshToken() ? { status: "loading", user: null } : { status: "anon", user: null };
-}
-
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<SessionState>(computeInitialState);
+  // Always starts at "loading", server and client alike — reading
+  // localStorage during the lazy initializer would differ between the
+  // server render (no `window`) and the client's hydration render (`window`
+  // exists there from the start), causing a hydration mismatch. The real
+  // token check below only ever runs after mount, inside the effect.
+  const [state, setState] = useState<SessionState>({ status: "loading", user: null });
 
   const applyAccessToken = useCallback((accessToken: string | null) => {
     setState(stateFromAccessToken(accessToken));
@@ -92,24 +85,29 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [applyAccessToken]);
 
   useEffect(() => {
-    // Both branches below were already resolved synchronously by
-    // computeInitialState — nothing to rehydrate on this mount.
-    if (getAccessToken()) return;
-    const refreshToken = getRefreshToken();
-    if (!refreshToken) return;
-
     let cancelled = false;
-    refreshRequest({ refreshToken })
-      .then((tokens) => {
-        if (cancelled) return;
-        setTokens(tokens);
-        applyAccessToken(tokens.accessToken);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        clearTokens();
+
+    // Deferred through a resolved promise so every setState call below runs
+    // inside an async continuation rather than synchronously in the effect
+    // body (see client.ts's refresh flow for the same pattern).
+    Promise.resolve(getRefreshToken()).then((refreshToken) => {
+      if (cancelled) return;
+      if (!refreshToken) {
         applyAccessToken(null);
-      });
+        return;
+      }
+      refreshRequest({ refreshToken })
+        .then((tokens) => {
+          if (cancelled) return;
+          setTokens(tokens);
+          applyAccessToken(tokens.accessToken);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          clearTokens();
+          applyAccessToken(null);
+        });
+    });
 
     return () => {
       cancelled = true;
