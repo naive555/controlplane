@@ -30,6 +30,13 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+# Without an explicit HOSTNAME, the standalone server binds to the
+# container's assigned network IP instead of all interfaces — external
+# port-forwarding still works (Docker routes to whatever's listening), but
+# a loopback-based HEALTHCHECK (127.0.0.1) then always fails with
+# "connection refused" since nothing listens there. A well-known Next.js
+# standalone + Docker gotcha.
+ENV HOSTNAME=0.0.0.0
 RUN addgroup -S app && adduser -S app -G app
 
 COPY --from=builder /app/public ./public

@@ -44,15 +44,21 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # web:
-  #   build:
-  #     context: ./apps/frontend
-  #   container_name: controlplane-web
-  #   ports:
-  #     - "4000:3000"
-  #   depends_on:
-  #     - api
-  #   restart: unless-stopped
+  web:
+    build:
+      context: ./apps/frontend
+    container_name: controlplane-web
+    ports:
+      - "4000:3000"
+    environment:
+      # Runtime env, read when the standalone Next.js server boots — routes
+      # the /api/* proxy rewrite to the api service via compose's internal
+      # DNS (not localhost, since web and api are separate containers).
+      BACKEND_URL: http://api:3000
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   pgdata:
