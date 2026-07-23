@@ -593,6 +593,26 @@ paths:
       summary: Remove a member
       tags:
       - organizations
+  /plans:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/PlanResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List subscription plans
+      tags:
+      - subscription
   /rbac/assign:
     post:
       consumes:

@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/google/uuid"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
 	"github.com/controlplane/backend/internal/config"
 	"github.com/controlplane/backend/internal/infra/database"
-	appredis "github.com/controlplane/backend/internal/infra/redis"
 	"github.com/controlplane/backend/internal/infra/database/db"
+	appredis "github.com/controlplane/backend/internal/infra/redis"
 	"github.com/controlplane/backend/internal/module/auth"
 	"github.com/controlplane/backend/internal/server"
 	applogger "github.com/controlplane/backend/internal/shared/logger"

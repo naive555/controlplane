@@ -30,6 +30,16 @@ func (h *Handler) Register(g *echo.Group, guards *appmw.Guards) {
 	g.POST("/assign", h.assign, guards.RequireOrg())
 }
 
+// RegisterPlans mounts GET /plans. Not in the source app — added in Phase 6
+// so the frontend subscription page can populate a plan picker (plan ids are
+// server-generated UUIDs with no fixed/knowable value, so the frontend has
+// no other way to discover them). Plans are global, not org-scoped, so this
+// only requires RequireAuth, not RequireOrg. See docs/03 "Deviations
+// resolved during Phase 6".
+func (h *Handler) RegisterPlans(g *echo.Group, guards *appmw.Guards) {
+	g.GET("", h.listPlans, guards.RequireAuth())
+}
+
 // get returns the active organization's subscription with its plan embedded,
 // or null if the organization has no subscription.
 // @Summary  Get the organization's subscription
@@ -82,6 +92,28 @@ func (h *Handler) assign(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, SuccessResponse{Success: true})
+}
+
+// listPlans returns every available subscription plan.
+// @Summary  List subscription plans
+// @Tags     subscription
+// @Security BearerAuth
+// @Produce  json
+// @Success  200  {array}  PlanResponse
+// @Failure  401  {object}  httpx.ErrorResponse  "Unauthorized"
+// @Router   /plans [get]
+func (h *Handler) listPlans(c echo.Context) error {
+	plans, err := h.service.ListPlans(c.Request().Context())
+	if err != nil {
+		return err
+	}
+
+	out := make([]PlanResponse, len(plans))
+	for i, p := range plans {
+		out[i] = PlanResponse{ID: p.ID, Name: p.Name, Limits: p.Limits, CreatedAt: p.CreatedAt}
+	}
+
+	return c.JSON(http.StatusOK, out)
 }
 
 func toSubscriptionResponse(row db.GetOrgSubscriptionRow) SubscriptionResponse {

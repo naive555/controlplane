@@ -35,6 +35,7 @@ type Querier interface {
 	ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]ListOrganizationMembersRow, error)
 	ListPermissionActionsByUserOrg(ctx context.Context, arg ListPermissionActionsByUserOrgParams) ([]string, error)
 	ListPermissionsByRoleIDs(ctx context.Context, dollar_1 []uuid.UUID) ([]Permission, error)
+	ListPlans(ctx context.Context) ([]Plan, error)
 	ListRolesByOrg(ctx context.Context, organizationID uuid.UUID) ([]Role, error)
 	QueryAuditLogs(ctx context.Context, arg QueryAuditLogsParams) ([]AuditLog, error)
 	RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) error

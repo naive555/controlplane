@@ -17,6 +17,7 @@ type mockSubStore struct {
 	getOrgSubscriptionWithPlan func(ctx context.Context, organizationID uuid.UUID) (db.GetOrgSubscriptionWithPlanRow, error)
 	getOrgSubscription         func(ctx context.Context, organizationID uuid.UUID) (db.GetOrgSubscriptionRow, error)
 	upsertOrgSubscription      func(ctx context.Context, arg db.UpsertOrgSubscriptionParams) error
+	listPlans                  func(ctx context.Context) ([]db.Plan, error)
 }
 
 func (m *mockSubStore) GetOrgSubscriptionWithPlan(ctx context.Context, organizationID uuid.UUID) (db.GetOrgSubscriptionWithPlanRow, error) {
@@ -29,6 +30,10 @@ func (m *mockSubStore) GetOrgSubscription(ctx context.Context, organizationID uu
 
 func (m *mockSubStore) UpsertOrgSubscription(ctx context.Context, arg db.UpsertOrgSubscriptionParams) error {
 	return m.upsertOrgSubscription(ctx, arg)
+}
+
+func (m *mockSubStore) ListPlans(ctx context.Context) ([]db.Plan, error) {
+	return m.listPlans(ctx)
 }
 
 func mustMarshal(t *testing.T, v any) json.RawMessage {
@@ -229,5 +234,36 @@ func TestAssignPlan_ForwardsToUpsert(t *testing.T) {
 	}
 	if gotArg.OrganizationID != orgID || gotArg.PlanID != planID {
 		t.Errorf("UpsertOrgSubscription called with %+v, want org=%v plan=%v", gotArg, orgID, planID)
+	}
+}
+
+func TestListPlans_ReturnsRows(t *testing.T) {
+	want := []db.Plan{{Name: "free"}, {Name: "pro"}, {Name: "enterprise"}}
+	svc := NewService(&mockSubStore{
+		listPlans: func(ctx context.Context) ([]db.Plan, error) {
+			return want, nil
+		},
+	})
+
+	got, err := svc.ListPlans(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("ListPlans() returned %d rows, want %d", len(got), len(want))
+	}
+}
+
+func TestListPlans_DatabaseErrorPropagates(t *testing.T) {
+	dbErr := errors.New("connection reset")
+	svc := NewService(&mockSubStore{
+		listPlans: func(ctx context.Context) ([]db.Plan, error) {
+			return nil, dbErr
+		},
+	})
+
+	_, err := svc.ListPlans(context.Background())
+	if !errors.Is(err, dbErr) {
+		t.Fatalf("expected the raw db error to propagate, got %v", err)
 	}
 }

@@ -26,6 +26,35 @@ func (q *Queries) GetPlanByName(ctx context.Context, name string) (Plan, error) 
 	return i, err
 }
 
+const listPlans = `-- name: ListPlans :many
+SELECT id, name, limits, created_at FROM plans ORDER BY created_at ASC
+`
+
+func (q *Queries) ListPlans(ctx context.Context) ([]Plan, error) {
+	rows, err := q.db.Query(ctx, listPlans)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Plan
+	for rows.Next() {
+		var i Plan
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Limits,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertPlan = `-- name: UpsertPlan :exec
 INSERT INTO plans (name, limits)
 VALUES ($1, $2)

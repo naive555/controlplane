@@ -67,7 +67,9 @@ func New(cfg *config.Config, log *slog.Logger, pool *pgxpool.Pool, rdb *redis.Cl
 	orgHandler.Register(e.Group("/organizations"), guards)
 
 	rbac.NewHandler(rbacSvc).Register(e.Group("/rbac"), guards)
-	subscription.NewHandler(subSvc).Register(e.Group("/subscription"), guards)
+	subHandler := subscription.NewHandler(subSvc)
+	subHandler.Register(e.Group("/subscription"), guards)
+	subHandler.RegisterPlans(e.Group("/plans"), guards)
 	auditlog.NewHandler(auditSvc).Register(e.Group("/audit-logs"), guards)
 
 	return e

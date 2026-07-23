@@ -24,6 +24,7 @@ type subStore interface {
 	GetOrgSubscriptionWithPlan(ctx context.Context, organizationID uuid.UUID) (db.GetOrgSubscriptionWithPlanRow, error)
 	GetOrgSubscription(ctx context.Context, organizationID uuid.UUID) (db.GetOrgSubscriptionRow, error)
 	UpsertOrgSubscription(ctx context.Context, arg db.UpsertOrgSubscriptionParams) error
+	ListPlans(ctx context.Context) ([]db.Plan, error)
 }
 
 // Service resolves and enforces subscription plan limits.
@@ -91,6 +92,14 @@ func (s *Service) AssignPlan(ctx context.Context, organizationID, planID uuid.UU
 		OrganizationID: organizationID,
 		PlanID:         planID,
 	})
+}
+
+// ListPlans returns every available subscription plan, oldest first (seed
+// insertion order). Not present in the source app — added in Phase 6 so the
+// frontend can populate a plan picker; see docs/03 "Deviations resolved
+// during Phase 6".
+func (s *Service) ListPlans(ctx context.Context) ([]db.Plan, error) {
+	return s.store.ListPlans(ctx)
 }
 
 // EnforceLimit returns apperror.LimitExceeded when currentCount has reached
