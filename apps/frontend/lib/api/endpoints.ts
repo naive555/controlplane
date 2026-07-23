@@ -143,6 +143,15 @@ export function getSubscription() {
   return apiRequest<SubscriptionResponse | null>("/subscription");
 }
 
+// Not in the source app — added in Phase 6 so the plan picker below can be
+// populated (plan ids are server-generated UUIDs with no other way to
+// discover them). See docs/03 "Deviations resolved during Phase 6".
+export function listPlans() {
+  return apiRequest<PlanResponse[]>("/plans");
+}
+
+// Note: the contract has no admin/permission check on this route (any org
+// member can assign a plan) — a documented source-app quirk, kept for parity.
 export function assignSubscription(planId: string) {
   return apiRequest<SuccessResponse>("/subscription/assign", { method: "POST", body: { planId } });
 }
